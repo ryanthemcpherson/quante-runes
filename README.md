@@ -1,6 +1,6 @@
 # Urgot Matchup Helper
 
-A desktop application designed to provide urgots with suggestions on how to play the matchup. The app displays champion-specific matchup data, tips, and strategies from Quante's matchup bible.
+A desktop application designed to provide urgots with suggestions on how to play the matchup. The app displays champion-specific matchup data, tips, and strategies from Quante's matchup bible. Important: This will not work if your connected google account does not have access to Quante's shared sheet.
 
 ![Urgot Matchup Helper Screenshot](screenshots/app_screenshot.png)
 
