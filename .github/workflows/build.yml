@@ -29,7 +29,7 @@ jobs:
         pyinstaller --noconfirm --onefile --windowed --name "QuanteRunes" --icon=assets/icon.ico main.py
         
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: QuanteRunes-Executable
         path: dist/QuanteRunes.exe 
