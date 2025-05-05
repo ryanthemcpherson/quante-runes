@@ -55,9 +55,7 @@
 - [ ] Add export functionality for matchup data
 
 ## 8. Maintainability
-- [ ] Add version control for Google Sheets data
 - [ ] Create proper requirements.txt
-- [ ] Add comprehensive README
 - [ ] Document API endpoints and data structure
 - [ ] Add changelog
 
