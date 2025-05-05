@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QComboBox, QPushButton, QFrame, QHBoxLayout
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QComboBox, QFrame, QHBoxLayout
 from .base_ui import BaseUI
 from src.logger import logger
 
@@ -6,7 +6,6 @@ class ChampionSelector(BaseUI):
     def __init__(self):
         super().__init__()
         self.champion_dropdown = None
-        self.test_button = None
         self.setup_champion_selector()
 
     def setup_champion_selector(self):
@@ -37,7 +36,7 @@ class ChampionSelector(BaseUI):
         dropdown_label.setStyleSheet("font-size: 14px; color: #cccccc; margin-bottom: 2px;")
         container_layout.addWidget(dropdown_label)
 
-        # Create horizontal layout for dropdown and button
+        # Create horizontal layout for dropdown
         selector_layout = QHBoxLayout()
         selector_layout.setSpacing(8)
         selector_layout.setContentsMargins(0, 0, 0, 0)
@@ -73,35 +72,11 @@ class ChampionSelector(BaseUI):
         """)
         selector_layout.addWidget(self.champion_dropdown)
 
-        # Add test button
-        self.test_button = QPushButton("View Matchup")
-        self.test_button.setFixedWidth(120)
-        self.test_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ff4444;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #ff5555;
-            }
-            QPushButton:pressed {
-                background-color: #ff3333;
-            }
-        """)
-        selector_layout.addWidget(self.test_button)
-
         # Add selector layout to container
         container_layout.addLayout(selector_layout)
 
         # Add container to main layout
         layout.addWidget(container)
-
-        return self.test_button
 
     def populate_champions(self, champions):
         """Populate the dropdown with champions"""
@@ -115,4 +90,8 @@ class ChampionSelector(BaseUI):
         """Get the currently selected champion"""
         champion = self.champion_dropdown.currentText()
         logger.debug(f"Current selected champion: {champion}")
-        return champion 
+        return champion
+        
+    def connect_selection_changed(self, callback):
+        """Connect the dropdown's selection changed signal to a callback"""
+        self.champion_dropdown.currentIndexChanged.connect(callback) 

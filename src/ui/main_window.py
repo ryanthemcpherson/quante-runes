@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
         
         # Create and add components
         self.champion_selector = ChampionSelector()
-        self.champion_selector.test_button.clicked.connect(self.on_test_matchup_clicked)
+        self.champion_selector.connect_selection_changed(self.on_champion_selection_changed)
         layout.addWidget(self.champion_selector)
         
         self.matchup_display = MatchupDisplay()
@@ -169,14 +169,19 @@ class MainWindow(QMainWindow):
             self.matchup_display.add_matchup(ban, "Recommended ban")
 
     @asyncSlot()
-    async def on_test_matchup_clicked(self):
-        """Handle the test matchup button click"""
-        logger.debug("Test matchup button clicked")
+    async def on_champion_selection_changed(self):
+        """Handle champion selection change in dropdown"""
+        logger.debug("Champion selection changed")
         self.check_timer.stop()
         self.update_timer.stop()
         self.manual_mode = True
         await self.test_selected_matchup()
         self.setWindowTitle(f"Urgot Matchup Helper - Viewing {self.champion_selector.get_selected_champion()}")
+
+    @asyncSlot()
+    async def on_test_matchup_clicked(self):
+        """Backward compatibility method"""
+        await self.on_champion_selection_changed()
 
     async def test_selected_matchup(self):
         """Display the selected matchup information"""
@@ -191,6 +196,7 @@ class MainWindow(QMainWindow):
             
             # Ensure matchups are loaded
             if not self.matchups:
+                logger.info("Loading matchups for the first time")
                 self.matchups = await self.matchup_loader.load_matchups()
                 
             logger.debug(f"Requesting matchup info for champion: {champion}")
@@ -199,8 +205,28 @@ class MainWindow(QMainWindow):
             self.matchup_display.clear_matchups()
             if not matchup_info:
                 logger.warning(f"No matchup information found for {champion}")
-                self.matchup_display.add_matchup(champion, f"Error: No matchup information found for {champion}.")
+                # Create a basic matchup object with minimal information
+                matchup_info = ChampionMatchup(
+                    champion_name=champion,
+                    matchup_difficulty="Unknown",
+                    runes=[],
+                    summoner_spell="",
+                    matchup_overview="No matchup information available.",
+                    early_game="",
+                    how_to_trade="",
+                    what_to_watch_out_for="",
+                    tips=""
+                )
+                self.matchup_display.add_matchup(champion, matchup_info)
             else:
+                # Log the matchup difficulty for debugging
+                difficulty = getattr(matchup_info, 'matchup_difficulty', 'Unknown')
+                logger.debug(f"Found matchup for {champion} with difficulty: {difficulty}")
+                
+                # Make sure difficulty is set to something other than empty string
+                if hasattr(matchup_info, 'matchup_difficulty') and not matchup_info.matchup_difficulty:
+                    matchup_info.matchup_difficulty = "Unknown"
+                
                 # Pass the matchup object directly to the display
                 logger.debug(f"Adding matchup display for {champion}")
                 self.matchup_display.add_matchup(champion, matchup_info)

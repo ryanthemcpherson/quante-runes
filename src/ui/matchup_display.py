@@ -1,13 +1,19 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QFrame, QWidget
+from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QFrame, QWidget, 
+                          QTabWidget)
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from .base_ui import BaseUI
 from src.logger import logger
+import tempfile
+import os
 
 class MatchupDisplay(BaseUI):
     def __init__(self):
         super().__init__()
         self.content_widget = None
         self.content_layout = None
+        self.network_manager = QNetworkAccessManager()
         self.setup_matchup_display()
 
     def setup_matchup_display(self):
@@ -41,11 +47,11 @@ class MatchupDisplay(BaseUI):
                 item.widget().deleteLater()
         self.content_layout.addStretch()  # Add stretch back after clearing
 
-    def add_matchup(self, champion, tips):
-        """Add a matchup widget"""
+    def add_matchup(self, champion, matchup_info):
+        """Add a matchup widget with improved layout"""
         logger.debug(f"Adding matchup display for {champion}")
-        logger.debug(f"Raw tips: {tips}")
         
+        # Main container frame
         matchup_frame = QFrame()
         matchup_frame.setStyleSheet("""
             QFrame {
@@ -56,186 +62,437 @@ class MatchupDisplay(BaseUI):
             }
         """)
         
-        layout = QVBoxLayout(matchup_frame)
-        layout.setSpacing(4)
-        layout.setContentsMargins(8, 8, 8, 8)
+        main_layout = QVBoxLayout(matchup_frame)
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(12, 12, 12, 12)
         
-        # Add champion name
+        # Top section with champion info and overview
+        top_section = QFrame()
+        top_section.setStyleSheet("""
+            QFrame {
+                background-color: #252729;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        
+        top_layout = QHBoxLayout(top_section)
+        top_layout.setSpacing(12)
+        
+        # Champion image on the left
+        img_frame = QFrame()
+        img_frame.setFixedSize(80, 80)
+        img_frame.setStyleSheet("""
+            QFrame {
+                border: 2px solid #3d3d3d;
+                border-radius: 4px;
+                background-color: #2d2d2d;
+            }
+        """)
+        img_layout = QVBoxLayout(img_frame)
+        img_layout.setContentsMargins(0, 0, 0, 0)
+        
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_label.setFixedSize(64, 64)
+        img_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        # Load champion image if available
+        if hasattr(matchup_info, 'image_url'):
+            # Debug the image URL
+            try:
+                # Access image_url property directly
+                champion_name = matchup_info.champion_name if hasattr(matchup_info, 'champion_name') else champion
+                logger.debug(f"Loading image for champion: {champion_name}")
+                
+                # Access the property directly (it's a property method, not an attribute)
+                image_url = matchup_info.image_url
+                logger.debug(f"Generated image URL: {image_url}")
+                
+                self.load_champion_image(img_label, image_url)
+            except Exception as e:
+                logger.error(f"Error loading champion image: {str(e)}", exc_info=True)
+                # Create a fallback URL with the champion name
+                try:
+                    formatted_name = champion.replace(" ", "").replace("'", "").replace(".", "")
+                    fallback_url = f"https://ddragon.leagueoflegends.com/cdn/15.9.1/img/champion/{formatted_name}.png"
+                    logger.debug(f"Using fallback image URL: {fallback_url}")
+                    self.load_champion_image(img_label, fallback_url)
+                except Exception as fallback_e:
+                    logger.error(f"Fallback image loading failed: {str(fallback_e)}", exc_info=True)
+        
+        # Champion info on the right
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        
+        # Champion name and difficulty
+        name_difficulty_layout = QHBoxLayout()
+        name_difficulty_layout.setSpacing(8)
+        
+        # Champion name
         champion_label = QLabel(champion)
-        champion_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ff4444;")
-        layout.addWidget(champion_label)
+        champion_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #ff4444;")
+        name_difficulty_layout.addWidget(champion_label)
         
-        # Extract difficulty text - only attempt if tips is a string
+        # Difficulty
         difficulty = "Unknown"
-        if isinstance(tips, str) and tips:
+        difficulty_color = "#ff4444"  # Default red color
+        
+        if isinstance(matchup_info, str):
+            # Handle string-based matchup info
             import re
-            match = re.search(r'Difficulty:\s*([^\n]+)', tips)
+            match = re.search(r'Difficulty:\s*([^\n]+)', matchup_info)
             if match:
                 difficulty = match.group(1).strip()
-                # Remove the difficulty line from tips
-                tips = re.sub(r'Difficulty:[^\n]+\n?', '', tips, flags=re.IGNORECASE).strip()
-                logger.debug(f"Found difficulty text: {difficulty}")
-        
-        # Add difficulty label
-        difficulty_label = QLabel(f"Difficulty: {difficulty}")
-        difficulty_label.setStyleSheet("font-size: 14px; color: #ff4444;")
-        layout.addWidget(difficulty_label)
-        
-        # Define sections with their headers and colors
-        sections = [
-            ("Early Game", ["EARLY GAME", "EARLY", "EARLY GAME:", "EARLY:"], "#ff4444"),
-            ("How to Trade", ["HOW TO TRADE", "TRADING", "TRADING:", "HOW TO TRADE:"], "#44ff44"),
-            ("What to Watch Out For", ["WHAT TO WATCH OUT FOR", "WATCH OUT", "WATCH OUT:", "WHAT TO WATCH OUT FOR:"], "#4444ff"),
-            ("Tips", ["TIPS", "TIPS:", "GENERAL TIPS", "GENERAL TIPS:"], "#ffff44")
-        ]
-        
-        if isinstance(tips, str):
-            # Process text-based tips
-            for title, headers, color in sections:
-                content = None
-                for header in headers:
-                    content = self.extract_section(tips, header)
-                    if content:
-                        break
-                
-                if content:
-                    self.add_section_to_layout(layout, title, content, color)
-            
-            # If no sections were found, display the raw tips
-            if not any(self.extract_section(tips, header) for _, headers, _ in sections for header in headers):
-                tips_label = QLabel(tips)
-                tips_label.setStyleSheet("color: #cccccc; font-size: 14px;")
-                tips_label.setWordWrap(True)
-                layout.addWidget(tips_label)
         else:
-            # If it's not a string, try to access attributes directly (assuming ChampionMatchup object)
-            try:
-                # Add matchup overview if available
-                if hasattr(tips, 'matchup_overview') and tips.matchup_overview:
-                    self.add_section_to_layout(layout, "Matchup Overview", tips.matchup_overview, "#ffff44")
+            # Handle ChampionMatchup object
+            if hasattr(matchup_info, 'matchup_difficulty') and matchup_info.matchup_difficulty:
+                raw_difficulty = matchup_info.matchup_difficulty
+                logger.debug(f"Raw difficulty from matchup object: '{raw_difficulty}'")
                 
-                # Add the gameplay sections
-                if hasattr(tips, 'Early_Game') and tips.Early_Game:
-                    self.add_section_to_layout(layout, "Early Game", tips.Early_Game, "#ff4444")
-                
-                if hasattr(tips, 'How_to_Trade') and tips.How_to_Trade:
-                    self.add_section_to_layout(layout, "How to Trade", tips.How_to_Trade, "#44ff44")
-                
-                if hasattr(tips, 'What_to_Watch_Out_For') and tips.What_to_Watch_Out_For:
-                    self.add_section_to_layout(layout, "What to Watch Out For", tips.What_to_Watch_Out_For, "#4444ff")
-                
-                if hasattr(tips, 'Tips') and tips.Tips:
-                    self.add_section_to_layout(layout, "Tips", tips.Tips, "#ffff44")
-                    
-                # Add rune information if available
-                if hasattr(tips, 'runes') and tips.runes and any(tips.runes):
-                    rune_text = "\n".join([r for r in tips.runes if r])
-                    if rune_text.strip():
-                        self.add_section_to_layout(layout, "Runes", rune_text, "#44aaff")
-                
-                # Add summoner spell information if available
-                if hasattr(tips, 'summoner_spell') and tips.summoner_spell:
-                    self.add_section_to_layout(layout, "Summoner Spell", tips.summoner_spell, "#aa44ff")
-                    
-            except Exception as e:
-                logger.error(f"Error displaying matchup: {str(e)}")
-                tips_label = QLabel(f"Error displaying matchup: {str(e)}")
-                tips_label.setStyleSheet("color: #ff4444; font-size: 14px;")
-                tips_label.setWordWrap(True)
-                layout.addWidget(tips_label)
+                # Clean and normalize the difficulty text
+                if raw_difficulty:
+                    difficulty = raw_difficulty.strip()
+                    # Convert it to a standard format if possible
+                    if any(easy_term in difficulty.upper() for easy_term in ['EASY', 'SIMPLE', '1', 'TRIVIAL']):
+                        difficulty = "Easy"
+                        difficulty_color = "#44aa44"  # Green for easy
+                    elif any(medium_term in difficulty.upper() for medium_term in ['MEDIUM', 'NORMAL', 'MODERATE', '2']):
+                        difficulty = "Medium"
+                        difficulty_color = "#aaaa44"  # Yellow for medium
+                    elif any(hard_term in difficulty.upper() for hard_term in ['HARD', 'DIFFICULT', 'CHALLENGING', '3']):
+                        difficulty = "Hard"
+                        difficulty_color = "#aa4444"  # Red for hard
+                    elif any(extreme_term in difficulty.upper() for extreme_term in ['EXTREME', 'VERY HARD', 'IMPOSSIBLE', '4', '5']):
+                        difficulty = "Extreme"
+                        difficulty_color = "#aa44aa"  # Purple for extreme
+        
+        logger.debug(f"Final difficulty for {champion}: '{difficulty}' with color {difficulty_color}")
+        
+        difficulty_label = QLabel(f"Difficulty: {difficulty}")
+        difficulty_label.setStyleSheet(f"""
+            font-size: 14px; 
+            font-weight: bold; 
+            color: white;
+            background-color: {difficulty_color};
+            border-radius: 4px;
+            padding: 4px 8px;
+        """)
+        name_difficulty_layout.addWidget(difficulty_label)
+        name_difficulty_layout.addStretch()
+        
+        info_layout.addLayout(name_difficulty_layout)
+        
+        # Matchup overview
+        overview = ""
+        if isinstance(matchup_info, str):
+            overview = matchup_info
+        else:
+            if hasattr(matchup_info, 'matchup_overview') and matchup_info.matchup_overview:
+                overview = matchup_info.matchup_overview
+                logger.debug(f"Found overview: {overview[:30]}...")
+        
+        if overview:
+            overview_label = QLabel(overview)
+            overview_label.setWordWrap(True)
+            overview_label.setStyleSheet("""
+                color: white;
+                font-size: 15px;
+                background-color: rgba(45, 45, 45, 0.7);
+                border-radius: 4px;
+                padding: 8px;
+            """)
+            info_layout.addWidget(overview_label)
+        
+        # Add champion info to top layout
+        top_layout.addWidget(img_frame)
+        top_layout.addLayout(info_layout, 1)
+        
+        # Add top section to main layout
+        main_layout.addWidget(top_section)
+        
+        # Create tabbed section for detailed information
+        if not isinstance(matchup_info, str):
+            # Dump all attributes for debugging
+            logger.debug(f"Matchup info attributes: {dir(matchup_info)}")
+            
+            # Create tab widget
+            tabs = QTabWidget()
+            tabs.setStyleSheet("""
+                QTabWidget::pane {
+                    border: 1px solid #3d3d3d;
+                    background-color: #252729;
+                    border-radius: 4px;
+                }
+                QTabBar::tab {
+                    background-color: #2d2d2d;
+                    color: #cccccc;
+                    padding: 8px 12px;
+                    margin-right: 2px;
+                    border-top-left-radius: 4px;
+                    border-top-right-radius: 4px;
+                }
+                QTabBar::tab:selected {
+                    background-color: #252729;
+                    border-bottom: 2px solid #ff4444;
+                }
+                QTabBar::tab:hover:!selected {
+                    background-color: #353537;
+                }
+            """)
+            
+            # Create tabs for each section
+            sections = [
+                ("Gameplan", self.create_gameplan_tab(matchup_info)),
+                ("Trading", self.create_trading_tab(matchup_info)),
+                ("Watchouts", self.create_watchouts_tab(matchup_info)),
+                ("Tips & Runes", self.create_tips_runes_tab(matchup_info))
+            ]
+            
+            for title, widget in sections:
+                if widget:
+                    tabs.addTab(widget, title)
+            
+            if tabs.count() > 0:
+                main_layout.addWidget(tabs)
+            else:
+                # No tabs were created, display a message
+                no_tabs_label = QLabel("No detailed information available for this matchup.")
+                no_tabs_label.setStyleSheet("color: #cccccc; font-size: 14px; text-align: center;")
+                no_tabs_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                main_layout.addWidget(no_tabs_label)
+        else:
+            # Display string-based tips directly
+            tips_label = QLabel(matchup_info)
+            tips_label.setStyleSheet("color: #cccccc; font-size: 14px;")
+            tips_label.setWordWrap(True)
+            main_layout.addWidget(tips_label)
         
         # Insert at the beginning (before the stretch)
         self.content_layout.insertWidget(self.content_layout.count() - 1, matchup_frame)
         logger.debug(f"Matchup display added for {champion}")
-        
-    def add_section_to_layout(self, layout, title, content, color):
-        """Add a section to the layout with the given title, content, and color"""
-        section_frame = QFrame()
-        section_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2d2d2d;
-                border-radius: 4px;
-                padding: 8px;
-                margin-top: 4px;
-            }
-        """)
-        section_layout = QVBoxLayout(section_frame)
-        
-        section_title = QLabel(title)
-        section_title.setStyleSheet(f"font-weight: bold; color: {color}; font-size: 14px;")
-        section_layout.addWidget(section_title)
-        
-        # Clean up the content
-        if isinstance(content, str):
-            content = self.clean_section_content(content)
-        
-        section_content = QLabel(content)
-        section_content.setStyleSheet("color: #cccccc; font-size: 14px;")
-        section_content.setWordWrap(True)
-        section_layout.addWidget(section_content)
-        
-        layout.addWidget(section_frame)
 
-    def extract_section(self, text, header):
-        """Extract a section from the text based on its header"""
-        if not text or not header:
+    def create_gameplan_tab(self, matchup_info):
+        """Create a tab for early game strategy"""
+        # Check for the attribute using both camel case and snake case
+        early_game = None
+        if hasattr(matchup_info, 'early_game'):
+            early_game = matchup_info.early_game
+        elif hasattr(matchup_info, 'Early_Game'):
+            early_game = matchup_info.Early_Game
+            
+        if not early_game:
             return None
+            
+        logger.debug(f"Creating gameplan tab with early game content: {early_game[:30]}...")
+            
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         
-        # Normalize the text and header
-        text = text.upper()
-        header = header.upper()
+        title = QLabel("Early Game Strategy")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #ff4444;")
+        layout.addWidget(title)
         
-        if header not in text:
+        content = QLabel(early_game)
+        content.setWordWrap(True)
+        content.setStyleSheet("color: #cccccc; font-size: 14px;")
+        layout.addWidget(content)
+        layout.addStretch()
+        
+        return widget
+        
+    def create_trading_tab(self, matchup_info):
+        """Create a tab for trading information"""
+        # Check for the attribute using both camel case and snake case
+        how_to_trade = None
+        if hasattr(matchup_info, 'how_to_trade'):
+            how_to_trade = matchup_info.how_to_trade
+        elif hasattr(matchup_info, 'How_to_Trade'):
+            how_to_trade = matchup_info.How_to_Trade
+            
+        if not how_to_trade:
             return None
+            
+        logger.debug(f"Creating trading tab with content: {how_to_trade[:30]}...")
+            
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         
-        start_idx = text.find(header) + len(header)
+        title = QLabel("How to Trade")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #44ff44;")
+        layout.addWidget(title)
         
-        # Find the next section header
-        next_section_start = len(text)
-        for _, headers, _ in [
-            ("Early Game", ["EARLY GAME", "EARLY", "EARLY GAME:", "EARLY:"], "#44ff44"),
-            ("How to Trade", ["HOW TO TRADE", "TRADING", "HOW TO TRADE:", "TRADING:"], "#4444ff"),
-            ("What to Watch Out For", ["WHAT TO WATCH OUT FOR", "WATCH OUT", "WHAT TO WATCH OUT FOR:", "WATCH OUT:"], "#ff4444"),
-            ("Tips", ["TIPS", "TIPS:", "ADDITIONAL TIPS", "ADDITIONAL TIPS:"], "#ffff44")
-        ]:
-            for h in headers:
-                idx = text.find(h.upper(), start_idx)
-                if idx != -1 and idx < next_section_start:
-                    next_section_start = idx
+        content = QLabel(how_to_trade)
+        content.setWordWrap(True)
+        content.setStyleSheet("color: #cccccc; font-size: 14px;")
+        layout.addWidget(content)
+        layout.addStretch()
         
-        content = text[start_idx:next_section_start].strip()
-        return content if content else None
+        return widget
+        
+    def create_watchouts_tab(self, matchup_info):
+        """Create a tab for what to watch out for"""
+        # Check for the attribute using both camel case and snake case
+        what_to_watch = None
+        if hasattr(matchup_info, 'what_to_watch_out_for'):
+            what_to_watch = matchup_info.what_to_watch_out_for
+        elif hasattr(matchup_info, 'What_to_Watch_Out_For'):
+            what_to_watch = matchup_info.What_to_Watch_Out_For
+            
+        if not what_to_watch:
+            return None
+            
+        logger.debug(f"Creating watchouts tab with content: {what_to_watch[:30]}...")
+            
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        
+        title = QLabel("What to Watch Out For")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #4444ff;")
+        layout.addWidget(title)
+        
+        content = QLabel(what_to_watch)
+        content.setWordWrap(True)
+        content.setStyleSheet("color: #cccccc; font-size: 14px;")
+        layout.addWidget(content)
+        layout.addStretch()
+        
+        return widget
+        
+    def create_tips_runes_tab(self, matchup_info):
+        """Create a tab for tips and runes"""
+        # Check for the attribute using both camel case and snake case
+        tips = None
+        if hasattr(matchup_info, 'tips'):
+            tips = matchup_info.tips
+        elif hasattr(matchup_info, 'Tips'):
+            tips = matchup_info.Tips
+            
+        has_tips = tips is not None and tips
+        has_runes = hasattr(matchup_info, 'runes') and matchup_info.runes and any(matchup_info.runes)
+        has_summ = hasattr(matchup_info, 'summoner_spell') and matchup_info.summoner_spell
+        
+        if not (has_tips or has_runes or has_summ):
+            return None
+            
+        logger.debug(f"Creating tips tab with content: {has_tips=}, {has_runes=}, {has_summ=}")
+            
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(16)
+        
+        # Tips section
+        if has_tips:
+            tips_frame = QFrame()
+            tips_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2d2d2d;
+                    border-radius: 4px;
+                    padding: 8px;
+                }
+            """)
+            tips_layout = QVBoxLayout(tips_frame)
+            
+            tips_title = QLabel("Tips")
+            tips_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffff44;")
+            tips_layout.addWidget(tips_title)
+            
+            tips_content = QLabel(tips)
+            tips_content.setWordWrap(True)
+            tips_content.setStyleSheet("color: #cccccc; font-size: 14px;")
+            tips_layout.addWidget(tips_content)
+            
+            layout.addWidget(tips_frame)
+        
+        # Runes and summoner spells section
+        if has_runes or has_summ:
+            build_frame = QFrame()
+            build_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2d2d2d;
+                    border-radius: 4px;
+                    padding: 8px;
+                }
+            """)
+            build_layout = QVBoxLayout(build_frame)
+            
+            build_title = QLabel("Recommended Build")
+            build_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #44aaff;")
+            build_layout.addWidget(build_title)
+            
+            # Runes section
+            if has_runes:
+                runes_title = QLabel("Runes:")
+                runes_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #44aaff;")
+                build_layout.addWidget(runes_title)
+                
+                rune_text = "\n".join([r for r in matchup_info.runes if r])
+                runes_content = QLabel(rune_text)
+                runes_content.setWordWrap(True)
+                runes_content.setStyleSheet("color: #cccccc; font-size: 14px;")
+                build_layout.addWidget(runes_content)
+            
+            # Summoner spell section
+            if has_summ:
+                summ_title = QLabel("Summoner Spell:")
+                summ_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #aa44ff; margin-top: 8px;")
+                build_layout.addWidget(summ_title)
+                
+                summ_content = QLabel(matchup_info.summoner_spell)
+                summ_content.setWordWrap(True)
+                summ_content.setStyleSheet("color: #cccccc; font-size: 14px;")
+                build_layout.addWidget(summ_content)
+            
+            layout.addWidget(build_frame)
+        
+        layout.addStretch()
+        return widget
 
-    def clean_section_content(self, content):
-        """Clean up section content"""
-        if not content:
-            return content
+    def load_champion_image(self, label, image_url):
+        """Load champion image from the DataDragon CDN"""
+        try:
+            url = image_url
+            request = QNetworkRequest(url)
+            reply = self.network_manager.get(request)
             
-        # Remove extra newlines and leading/trailing whitespace
-        lines = [line.strip() for line in content.split('\n') if line.strip()]
-        
-        # Remove any remaining section headers and colons
-        headers = [
-            "EARLY GAME", "EARLY", "EARLY GAME:", "EARLY:",
-            "HOW TO TRADE", "TRADING", "HOW TO TRADE:", "TRADING:",
-            "WHAT TO WATCH OUT FOR", "WATCH OUT", "WHAT TO WATCH OUT FOR:", "WATCH OUT:",
-            "TIPS", "TIPS:", "ADDITIONAL TIPS", "ADDITIONAL TIPS:"
-        ]
-        
-        cleaned_lines = []
-        for line in lines:
-            # Remove any section headers
-            for header in headers:
-                line = line.replace(header, '')
+            # Connect to the finished signal
+            reply.finished.connect(lambda: self.on_image_downloaded(reply, label))
             
-            # Remove leading colons and spaces
-            line = line.lstrip(':').strip()
+        except Exception as e:
+            logger.error(f"Error loading champion image: {str(e)}", exc_info=True)
             
-            # Remove any remaining colons at the start of the line
-            if line.startswith(':'):
-                line = line[1:].strip()
-            
-            if line:
-                cleaned_lines.append(line)
-        
-        return '\n'.join(cleaned_lines) 
+    def on_image_downloaded(self, reply, label):
+        """Handle downloaded image data"""
+        try:
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                # Read the image data
+                img_data = reply.readAll()
+                
+                # Save to a temporary file
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                temp_file.write(img_data.data())
+                temp_file.close()
+                
+                # Load image from the file
+                pixmap = QPixmap(temp_file.name)
+                scaled_pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                
+                # Set the pixmap to the label
+                label.setPixmap(scaled_pixmap)
+                
+                # Clean up the temporary file
+                os.unlink(temp_file.name)
+            else:
+                logger.error(f"Error downloading image: {reply.errorString()}")
+                
+        except Exception as e:
+            logger.error(f"Error processing downloaded image: {str(e)}", exc_info=True)
+        finally:
+            reply.deleteLater() 

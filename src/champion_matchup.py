@@ -19,7 +19,33 @@ class ChampionMatchup:
     def image_url(self) -> str:
         """Get the Data Dragon CDN URL for the champion's image."""
         # Convert champion name to the format used in URLs (e.g., "Aatrox" -> "Aatrox")
-        formatted_name = self.champion_name
+        # Handle special cases for champion names with spaces or other characters
+        formatted_name = self.champion_name.strip()
+        
+        # Handle special cases
+        if " " in formatted_name:
+            # Remove spaces for champions like "Aurelion Sol" -> "AurelionSol"
+            formatted_name = formatted_name.replace(" ", "")
+        
+        # Handle apostrophes for champions like "Kai'Sa" -> "Kaisa"
+        formatted_name = formatted_name.replace("'", "")
+        
+        # Handle dots for champions like "Dr. Mundo" -> "DrMundo"
+        formatted_name = formatted_name.replace(".", "")
+        
+        # Handle periods for champions like "Rek'Sai" -> "RekSai"
+        formatted_name = formatted_name.replace("'", "")
+        
+        # Special case mappings for champions with unique naming
+        special_cases = {
+            "Wukong": "MonkeyKing",
+            "Renata Glasc": "Renata",
+            "Nunu & Willump": "Nunu"
+        }
+        
+        if formatted_name in special_cases:
+            formatted_name = special_cases[formatted_name]
+            
         return f"https://ddragon.leagueoflegends.com/cdn/15.9.1/img/champion/{formatted_name}.png"
             
     def to_dict(self) -> dict:

@@ -24,9 +24,12 @@ MAX_RETRY_DELAY = 32  # seconds
 RATE_LIMIT_DELAY = 1  # seconds between requests
 
 class GoogleSheetsManager:
-    def __init__(self, spreadsheet_id: str = "1wcrN6SRX1EsEce4s2HL8GBIa1CjPVG5L32mW9ml7K3s"):
+    def __init__(self, spreadsheet_id: str = None):
         """Initialize the Google Sheets manager with the spreadsheet ID."""
-        self.spreadsheet_id = spreadsheet_id
+        # Use a default spreadsheet ID if none provided
+        self.spreadsheet_id = spreadsheet_id or "1wcrN6SRX1EsEce4s2HL8GBIa1CjPVG5L32mW9ml7K3s"
+        logger.info(f"Initializing GoogleSheetsManager with spreadsheet ID: {self.spreadsheet_id}")
+        
         self.service = self._get_service()
         self.last_request_time = 0
         
@@ -286,16 +289,35 @@ class GoogleSheetsManager:
         """Get the matchup difficulty string for the given champion from cached data."""
         try:
             champion = champion.strip()
-            row_idx = self._find_champion_row_index(champion)+2
-            if row_idx >= 0:
+            row_idx = self._find_champion_row_index(champion)  # Remove the +2 offset
+            logger.debug(f"Looking for difficulty of {champion} at row index {row_idx}")
+            
+            if row_idx >= 0 and row_idx < len(self.matchups_data):
                 row = self.matchups_data[row_idx]
-                # If difficulty is in column C (index 2)
-                if len(row) > 2:
+                logger.debug(f"Row data for {champion}: {row}")
+                
+                # Try looking at different columns (C, D, E) to find difficulty
+                # First check column C (index 2)
+                if len(row) > 2 and row[2]:
+                    logger.debug(f"Found difficulty in column C (index 2): {row[2]}")
                     return row[2]
-            return ''
+                    
+                # If not found, check column D (index 3)
+                if len(row) > 3 and row[3]:
+                    second_col = row[3].strip().upper()
+                    if "EASY" in second_col or "MEDIUM" in second_col or "HARD" in second_col:
+                        logger.debug(f"Found difficulty-like text in column D (index 3): {row[3]}")
+                        return row[3]
+                
+                # If still not found, log the issue
+                logger.warning(f"No difficulty info found for {champion} in expected columns")
+                return 'Unknown'
+            
+            logger.warning(f"Invalid row index {row_idx} for champion {champion}")
+            return 'Unknown'
         except Exception as e:
             logger.error(f"Error getting matchup difficulty for {champion}: {str(e)}", exc_info=True)
-            return ''
+            return 'Unknown'
 
     def create_gameplay_dict(self, champion: str) -> dict:
         """Create a dictionary of gameplay sections for the given champion."""
