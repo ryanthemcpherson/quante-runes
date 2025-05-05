@@ -289,29 +289,16 @@ class GoogleSheetsManager:
         """Get the matchup difficulty string for the given champion from cached data."""
         try:
             champion = champion.strip()
-            row_idx = self._find_champion_row_index(champion)  # Remove the +2 offset
+            row_idx = self._find_champion_row_index(champion) + 2 # Offset by 2 to account for placement
             logger.debug(f"Looking for difficulty of {champion} at row index {row_idx}")
             
             if row_idx >= 0 and row_idx < len(self.matchups_data):
                 row = self.matchups_data[row_idx]
                 logger.debug(f"Row data for {champion}: {row}")
-                
-                # Try looking at different columns (C, D, E) to find difficulty
                 # First check column C (index 2)
                 if len(row) > 2 and row[2]:
                     logger.debug(f"Found difficulty in column C (index 2): {row[2]}")
                     return row[2]
-                    
-                # If not found, check column D (index 3)
-                if len(row) > 3 and row[3]:
-                    second_col = row[3].strip().upper()
-                    if "EASY" in second_col or "MEDIUM" in second_col or "HARD" in second_col:
-                        logger.debug(f"Found difficulty-like text in column D (index 3): {row[3]}")
-                        return row[3]
-                
-                # If still not found, log the issue
-                logger.warning(f"No difficulty info found for {champion} in expected columns")
-                return 'Unknown'
             
             logger.warning(f"Invalid row index {row_idx} for champion {champion}")
             return 'Unknown'

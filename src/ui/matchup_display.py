@@ -147,25 +147,18 @@ class MatchupDisplay(BaseUI):
         else:
             # Handle ChampionMatchup object
             if hasattr(matchup_info, 'matchup_difficulty') and matchup_info.matchup_difficulty:
-                raw_difficulty = matchup_info.matchup_difficulty
-                logger.debug(f"Raw difficulty from matchup object: '{raw_difficulty}'")
+                difficulty = matchup_info.matchup_difficulty.strip()
+                logger.debug(f"Raw difficulty from matchup object: '{difficulty}'")
                 
-                # Clean and normalize the difficulty text
-                if raw_difficulty:
-                    difficulty = raw_difficulty.strip()
-                    # Convert it to a standard format if possible
-                    if any(easy_term in difficulty.upper() for easy_term in ['EASY', 'SIMPLE', '1', 'TRIVIAL']):
-                        difficulty = "Easy"
-                        difficulty_color = "#44aa44"  # Green for easy
-                    elif any(medium_term in difficulty.upper() for medium_term in ['MEDIUM', 'NORMAL', 'MODERATE', '2']):
-                        difficulty = "Medium"
-                        difficulty_color = "#aaaa44"  # Yellow for medium
-                    elif any(hard_term in difficulty.upper() for hard_term in ['HARD', 'DIFFICULT', 'CHALLENGING', '3']):
-                        difficulty = "Hard"
-                        difficulty_color = "#aa4444"  # Red for hard
-                    elif any(extreme_term in difficulty.upper() for extreme_term in ['EXTREME', 'VERY HARD', 'IMPOSSIBLE', '4', '5']):
-                        difficulty = "Extreme"
-                        difficulty_color = "#aa44aa"  # Purple for extreme
+                # Set color based on keywords in the difficulty text
+                if any(easy_term in difficulty.upper() for easy_term in ['EASY', 'SIMPLE', '1', 'TRIVIAL']):
+                    difficulty_color = "#44aa44"  # Green for easy
+                elif any(medium_term in difficulty.upper() for medium_term in ['MEDIUM', 'NORMAL', 'MODERATE', '2']):
+                    difficulty_color = "#aaaa44"  # Yellow for medium
+                elif any(hard_term in difficulty.upper() for hard_term in ['HARD', 'DIFFICULT', 'CHALLENGING', '3']):
+                    difficulty_color = "#aa4444"  # Red for hard
+                elif any(extreme_term in difficulty.upper() for extreme_term in ['EXTREME', 'VERY HARD', 'IMPOSSIBLE', '4', '5']):
+                    difficulty_color = "#aa44aa"  # Purple for extreme
         
         logger.debug(f"Final difficulty for {champion}: '{difficulty}' with color {difficulty_color}")
         
