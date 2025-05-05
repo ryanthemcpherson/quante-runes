@@ -22,6 +22,9 @@ class ChampionMatchup:
         # Handle special cases for champion names with spaces or other characters
         formatted_name = self.champion_name.strip()
         
+        # Make sure the name is in proper case
+        formatted_name = formatted_name.title()
+        
         # Handle special cases
         if " " in formatted_name:
             # Remove spaces for champions like "Aurelion Sol" -> "AurelionSol"

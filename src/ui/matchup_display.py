@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QFrame, QWidget, 
                           QTabWidget)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from .base_ui import BaseUI
@@ -81,12 +81,12 @@ class MatchupDisplay(BaseUI):
         
         # Champion image on the left
         img_frame = QFrame()
-        img_frame.setFixedSize(80, 80)
+        img_frame.setFixedSize(100, 100)
         img_frame.setStyleSheet("""
             QFrame {
-                border: 2px solid #3d3d3d;
+                border: none;
                 border-radius: 4px;
-                background-color: #2d2d2d;
+                background-color: transparent;
             }
         """)
         img_layout = QVBoxLayout(img_frame)
@@ -94,7 +94,7 @@ class MatchupDisplay(BaseUI):
         
         img_label = QLabel()
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        img_label.setFixedSize(64, 64)
+        img_label.setFixedSize(90, 90)
         img_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
         
         # Load champion image if available
@@ -452,14 +452,14 @@ class MatchupDisplay(BaseUI):
             
             layout.addWidget(build_frame)
         
-        layout.addStretch()
+        layout.addStretch() 
         return widget
 
     def load_champion_image(self, label, image_url):
         """Load champion image from the DataDragon CDN"""
         try:
             url = image_url
-            request = QNetworkRequest(url)
+            request = QNetworkRequest(QUrl(url))
             reply = self.network_manager.get(request)
             
             # Connect to the finished signal
@@ -482,7 +482,7 @@ class MatchupDisplay(BaseUI):
                 
                 # Load image from the file
                 pixmap = QPixmap(temp_file.name)
-                scaled_pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(90, 90, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 
                 # Set the pixmap to the label
                 label.setPixmap(scaled_pixmap)
