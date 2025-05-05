@@ -19,7 +19,6 @@
 - [x] Create configuration file for constants and settings
 
 ## 3. Performance Optimizations
-- [ ] Implement caching for Google Sheets data
 - [ ] Add rate limiting for API requests
 - [ ] Use background threads for heavy operations
 - [ ] Optimize UI update frequency

@@ -11,3 +11,6 @@ __pycache__
 .env
 logs/*
 *.log
+.ruff_cache
+token.json
+todo.md

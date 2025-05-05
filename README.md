@@ -15,12 +15,7 @@ A tool to help Urgot players by displaying matchup information from a Quante's m
    - Enable the Google Sheets API
    - Create credentials (OAuth 2.0 Client ID)
    - Download the credentials JSON file and save it as `credentials.json` in the project root
-
-4. Create a `.env` file with your Google Sheet ID:
-   ```
-   SHEET_ID=your_sheet_id_here
-   ```
-
+   
 ## Usage
 
 Run the application:

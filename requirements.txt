@@ -8,3 +8,5 @@ python-dotenv==1.0.0
 qasync==0.27.1
 pulsefire==0.1.0
 pytest
+gspread==5.12.0
+oauth2client==4.1.3

@@ -1,8 +1,5 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QScrollArea, 
-                           QFrame, QComboBox, QPushButton)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
-from logger import logger
+                           QFrame)
 
 class BaseUI(QWidget):
     def __init__(self):

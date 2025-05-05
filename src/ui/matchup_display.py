@@ -1,8 +1,7 @@
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QFrame, QWidget
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QFrame, QWidget
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from .base_ui import BaseUI
-from logger import logger
+from src.logger import logger
 
 class MatchupDisplay(BaseUI):
     def __init__(self):
@@ -66,9 +65,9 @@ class MatchupDisplay(BaseUI):
         champion_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ff4444;")
         layout.addWidget(champion_label)
         
-        # Extract difficulty text
+        # Extract difficulty text - only attempt if tips is a string
         difficulty = "Unknown"
-        if tips:
+        if isinstance(tips, str) and tips:
             import re
             match = re.search(r'Difficulty:\s*([^\n]+)', tips)
             if match:
@@ -90,49 +89,92 @@ class MatchupDisplay(BaseUI):
             ("Tips", ["TIPS", "TIPS:", "GENERAL TIPS", "GENERAL TIPS:"], "#ffff44")
         ]
         
-        for title, headers, color in sections:
-            content = None
-            for header in headers:
-                content = self.extract_section(tips, header)
+        if isinstance(tips, str):
+            # Process text-based tips
+            for title, headers, color in sections:
+                content = None
+                for header in headers:
+                    content = self.extract_section(tips, header)
+                    if content:
+                        break
+                
                 if content:
-                    break
+                    self.add_section_to_layout(layout, title, content, color)
             
-            if content:
-                section_frame = QFrame()
-                section_frame.setStyleSheet(f"""
-                    QFrame {{
-                        background-color: #2d2d2d;
-                        border-radius: 4px;
-                        padding: 8px;
-                        margin-top: 4px;
-                    }}
-                """)
-                section_layout = QVBoxLayout(section_frame)
+            # If no sections were found, display the raw tips
+            if not any(self.extract_section(tips, header) for _, headers, _ in sections for header in headers):
+                tips_label = QLabel(tips)
+                tips_label.setStyleSheet("color: #cccccc; font-size: 14px;")
+                tips_label.setWordWrap(True)
+                layout.addWidget(tips_label)
+        else:
+            # If it's not a string, try to access attributes directly (assuming ChampionMatchup object)
+            try:
+                # Add matchup overview if available
+                if hasattr(tips, 'matchup_overview') and tips.matchup_overview:
+                    self.add_section_to_layout(layout, "Matchup Overview", tips.matchup_overview, "#ffff44")
                 
-                section_title = QLabel(title)
-                section_title.setStyleSheet(f"font-weight: bold; color: {color}; font-size: 14px;")
-                section_layout.addWidget(section_title)
+                # Add the gameplay sections
+                if hasattr(tips, 'Early_Game') and tips.Early_Game:
+                    self.add_section_to_layout(layout, "Early Game", tips.Early_Game, "#ff4444")
                 
-                # Clean up the content
-                content = self.clean_section_content(content)
+                if hasattr(tips, 'How_to_Trade') and tips.How_to_Trade:
+                    self.add_section_to_layout(layout, "How to Trade", tips.How_to_Trade, "#44ff44")
                 
-                section_content = QLabel(content)
-                section_content.setStyleSheet("color: #cccccc; font-size: 14px;")
-                section_content.setWordWrap(True)
-                section_layout.addWidget(section_content)
+                if hasattr(tips, 'What_to_Watch_Out_For') and tips.What_to_Watch_Out_For:
+                    self.add_section_to_layout(layout, "What to Watch Out For", tips.What_to_Watch_Out_For, "#4444ff")
                 
-                layout.addWidget(section_frame)
-        
-        # If no sections were found, display the raw tips
-        if not any(self.extract_section(tips, header) for _, headers, _ in sections for header in headers):
-            tips_label = QLabel(tips)
-            tips_label.setStyleSheet("color: #cccccc; font-size: 14px;")
-            tips_label.setWordWrap(True)
-            layout.addWidget(tips_label)
+                if hasattr(tips, 'Tips') and tips.Tips:
+                    self.add_section_to_layout(layout, "Tips", tips.Tips, "#ffff44")
+                    
+                # Add rune information if available
+                if hasattr(tips, 'runes') and tips.runes and any(tips.runes):
+                    rune_text = "\n".join([r for r in tips.runes if r])
+                    if rune_text.strip():
+                        self.add_section_to_layout(layout, "Runes", rune_text, "#44aaff")
+                
+                # Add summoner spell information if available
+                if hasattr(tips, 'summoner_spell') and tips.summoner_spell:
+                    self.add_section_to_layout(layout, "Summoner Spell", tips.summoner_spell, "#aa44ff")
+                    
+            except Exception as e:
+                logger.error(f"Error displaying matchup: {str(e)}")
+                tips_label = QLabel(f"Error displaying matchup: {str(e)}")
+                tips_label.setStyleSheet("color: #ff4444; font-size: 14px;")
+                tips_label.setWordWrap(True)
+                layout.addWidget(tips_label)
         
         # Insert at the beginning (before the stretch)
         self.content_layout.insertWidget(self.content_layout.count() - 1, matchup_frame)
         logger.debug(f"Matchup display added for {champion}")
+        
+    def add_section_to_layout(self, layout, title, content, color):
+        """Add a section to the layout with the given title, content, and color"""
+        section_frame = QFrame()
+        section_frame.setStyleSheet("""
+            QFrame {
+                background-color: #2d2d2d;
+                border-radius: 4px;
+                padding: 8px;
+                margin-top: 4px;
+            }
+        """)
+        section_layout = QVBoxLayout(section_frame)
+        
+        section_title = QLabel(title)
+        section_title.setStyleSheet(f"font-weight: bold; color: {color}; font-size: 14px;")
+        section_layout.addWidget(section_title)
+        
+        # Clean up the content
+        if isinstance(content, str):
+            content = self.clean_section_content(content)
+        
+        section_content = QLabel(content)
+        section_content.setStyleSheet("color: #cccccc; font-size: 14px;")
+        section_content.setWordWrap(True)
+        section_layout.addWidget(section_content)
+        
+        layout.addWidget(section_frame)
 
     def extract_section(self, text, header):
         """Extract a section from the text based on its header"""

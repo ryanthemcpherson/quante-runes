@@ -1,7 +1,6 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QComboBox, QPushButton, QSpacerItem, QSizePolicy, QFrame, QHBoxLayout
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QComboBox, QPushButton, QFrame, QHBoxLayout
 from .base_ui import BaseUI
-from logger import logger
+from src.logger import logger
 
 class ChampionSelector(BaseUI):
     def __init__(self):

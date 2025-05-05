@@ -1,10 +1,9 @@
-import asyncio
 import aiohttp
 import ssl
 import base64
 import psutil
 import re
-from logger import logger
+from src.logger import logger
 from exceptions import LeagueClientError
 
 class LeagueClient:
@@ -65,19 +64,28 @@ class LeagueClient:
 
     async def get_enemy_champions(self):
         try:
-            session = await self.get_champion_select_session()
-            if not session:
+            session_data = await self.get_champion_select_session()
+            if not session_data:
                 return []
             enemy_champions = []
             my_team = None
-            for player in session['myTeam']:
+            
+            # Get the session data as a dictionary
+            session = session_data if isinstance(session_data, dict) else await session_data.json()
+            
+            # Find which team we're on
+            for player in session.get('myTeam', []):
                 if player.get('cellId') == session.get('localPlayerCellId'):
                     my_team = 'myTeam'
                     break
             if my_team is None:
                 my_team = 'theirTeam'
+            
+            # Determine enemy team
             enemy_team = 'theirTeam' if my_team == 'myTeam' else 'myTeam'
-            for player in session[enemy_team]:
+            
+            # Get enemy champions
+            for player in session.get(enemy_team, []):
                 if player.get('championId') and player['championId'] != 0:
                     champ_id = player['championId']
                     champ_data = await self.get_champion_data(champ_id)

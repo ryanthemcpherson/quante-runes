@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from qasync import QEventLoop
 from src.ui.main_window import MainWindow
-from logger import logger
+from src.logger import logger
 from pulsefire.clients import BaseClient
 
 async def shutdown(window):

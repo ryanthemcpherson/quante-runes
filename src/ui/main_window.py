@@ -1,13 +1,13 @@
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon
 from .matchup_display import MatchupDisplay
 from .champion_selector import ChampionSelector
 from ..core.league_client import LeagueClient
 from ..data.google_sheets_manager import GoogleSheetsManager
 from qasync import asyncSlot
-from logger import logger
-from exceptions import LeagueClientError, GoogleSheetsError
+from src.logger import logger
+from src.matchup_loader import MatchupLoader
+from src.champion_matchup import ChampionMatchup
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -19,6 +19,8 @@ class MainWindow(QMainWindow):
         self.league_client = LeagueClient()
         # self.league_client.start()  # No longer needed
         self.sheets_manager = GoogleSheetsManager()
+        self.matchup_loader = MatchupLoader()
+        self.matchups = []  # Will store loaded matchups
         self.manual_mode = False
         self.in_champion_select = False
         
@@ -96,6 +98,10 @@ class MainWindow(QMainWindow):
     async def update_matchups(self):
         """Update the displayed matchup information"""
         try:
+            # Ensure matchups are loaded
+            if not self.matchups:
+                self.matchups = await self.matchup_loader.load_matchups()
+                
             enemy_champions = await self.league_client.get_enemy_champions()
             self.matchup_display.clear_matchups()
             
@@ -107,20 +113,57 @@ class MainWindow(QMainWindow):
                 return
                 
             for champion in enemy_champions:
-                tips = await self.sheets_manager.get_matchup_tips(champion)
-                self.matchup_display.add_matchup(champion, tips)
+                matchup_info = self.find_matchup_by_name(champion)
+                if matchup_info:
+                    # Pass the matchup object directly to the display
+                    self.matchup_display.add_matchup(champion, matchup_info)
+                else:
+                    self.matchup_display.add_matchup(champion, f"No matchup information found for {champion}.")
         except Exception as e:
             logger.error(f"Error updating matchups: {str(e)}", exc_info=True)
             self.matchup_display.clear_matchups()
-            self.matchup_display.add_matchup("Error", "Unable to fetch matchup information")
+            self.matchup_display.add_matchup("Error", f"Unable to fetch matchup information: {str(e)}")
+
+    def format_matchup_tips(self, matchup: ChampionMatchup) -> str:
+        """Format the matchup information as a string for display (legacy method, kept for compatibility)"""
+        sections = []
+        
+        # Add matchup overview if available
+        if matchup.matchup_overview:
+            sections.append(f"Matchup Overview: {matchup.matchup_overview}")
+            
+        # Add Early Game section if available
+        if matchup.Early_Game:
+            sections.append(f"EARLY GAME: {matchup.Early_Game}")
+            
+        # Add How to Trade section if available
+        if matchup.How_to_Trade:
+            sections.append(f"HOW TO TRADE: {matchup.How_to_Trade}")
+            
+        # Add What to Watch Out For section if available
+        if matchup.What_to_Watch_Out_For:
+            sections.append(f"WHAT TO WATCH OUT FOR: {matchup.What_to_Watch_Out_For}")
+            
+        # Add Tips section if available
+        if matchup.Tips:
+            sections.append(f"TIPS: {matchup.Tips}")
+            
+        return "\n\n".join(sections)
+
+    def find_matchup_by_name(self, champion_name: str) -> ChampionMatchup:
+        """Find a matchup by champion name"""
+        champion_name = champion_name.strip().lower()
+        for matchup in self.matchups:
+            if matchup.champion_name.strip().lower() == champion_name:
+                return matchup
+        return None
 
     def show_ban_suggestions(self):
         """Display ban suggestions in the matchup display"""
         self.matchup_display.clear_matchups()
         ban_list = [
             "Rumble", "Ambessa", "Vayne", "Mordekaiser", "Olaf",
-            "Illaoi", "Gnar", "Jayce", "K'Sante"
-        ]
+            "Illaoi", "Gnar", "Jayce", "K'Sante"]
         
         for ban in ban_list:
             self.matchup_display.add_matchup(ban, "Recommended ban")
@@ -145,17 +188,22 @@ class MainWindow(QMainWindow):
                 self.matchup_display.clear_matchups()
                 self.matchup_display.add_matchup("Error", "Please select a champion first")
                 return
+            
+            # Ensure matchups are loaded
+            if not self.matchups:
+                self.matchups = await self.matchup_loader.load_matchups()
                 
-            logger.debug(f"Requesting matchup tips for champion: {champion}")
-            tips = await self.sheets_manager.get_matchup_tips(champion)
-            logger.debug(f"Received tips for {champion}: {tips}")
+            logger.debug(f"Requesting matchup info for champion: {champion}")
+            matchup_info = self.find_matchup_by_name(champion)
+            
             self.matchup_display.clear_matchups()
-            if not tips or 'No matchup information found' in tips or 'Failed to get matchup tips' in tips:
+            if not matchup_info:
                 logger.warning(f"No matchup information found for {champion}")
                 self.matchup_display.add_matchup(champion, f"Error: No matchup information found for {champion}.")
             else:
+                # Pass the matchup object directly to the display
                 logger.debug(f"Adding matchup display for {champion}")
-                self.matchup_display.add_matchup(champion, tips)
+                self.matchup_display.add_matchup(champion, matchup_info)
         except Exception as e:
             logger.error(f"Error displaying matchup: {str(e)}", exc_info=True)
             self.matchup_display.clear_matchups()
