@@ -14,3 +14,4 @@ logs/*
 .ruff_cache
 token.json
 todo.md
+startup_log.txt

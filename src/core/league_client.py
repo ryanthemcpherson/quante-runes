@@ -12,8 +12,14 @@ class LeagueClient:
         self.token = None
         self.session = None
         self.base_url = None
-        self._discover_lcu()
-        logger.info("LeagueClient (direct LCU API) initialized")
+        self.client_running = False
+        try:
+            self._discover_lcu()
+            self.client_running = True
+            logger.info("LeagueClient (direct LCU API) initialized")
+        except LeagueClientError:
+            logger.warning("League Client not running. Will retry connection later.")
+            # Don't raise the exception, just log and continue
 
     def _discover_lcu(self):
         # Find the LeagueClientUx process and extract port/token
@@ -32,9 +38,25 @@ class LeagueClient:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         logger.error("Could not find LeagueClientUx process or extract port/token.")
-        raise LeagueClientError("Could not find LeagueClientUx process or extract port/token.")
+        raise LeagueClientError("League Client is not running. Please start the League of Legends client.")
+
+    async def try_reconnect(self):
+        """Attempt to reconnect to the League Client if it's running"""
+        try:
+            self._discover_lcu()
+            self.client_running = True
+            logger.info("Successfully reconnected to League Client")
+            return True
+        except LeagueClientError:
+            self.client_running = False
+            logger.debug("League Client still not running")
+            return False
 
     async def _get_session(self):
+        if not self.client_running:
+            if not await self.try_reconnect():
+                raise LeagueClientError("League Client is not running. Please start the League of Legends client.")
+                
         if self.session is None:
             auth = base64.b64encode(f"riot:{self.token}".encode()).decode()
             headers = {
