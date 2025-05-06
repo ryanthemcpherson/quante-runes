@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 @dataclass
 class ChampionMatchup:
@@ -7,13 +6,15 @@ class ChampionMatchup:
     
     champion_name: str
     matchup_difficulty: str
-    runes: List[str]  # List of rune names to take against this champion
+    runes: str  # List of rune names to take against this champion
     summoner_spell: str  # Recommended summoner spell, Ignite or Teleport
     matchup_overview: str  # Brief overview of the matchup
     early_game: str
     how_to_trade: str
     what_to_watch_out_for: str
     tips: str
+    rune_image_url: str = ""  # URL for the rune image
+    summoner_spell_image_url: str = ""  # URL for the summoner spell image
     
     @property
     def image_url(self) -> str:
@@ -62,7 +63,9 @@ class ChampionMatchup:
             "early_game": self.early_game,
             "how_to_trade": self.how_to_trade,
             "what_to_watch_out_for": self.what_to_watch_out_for,
-            "tips": self.tips
+            "tips": self.tips,
+            "rune_image_url": self.rune_image_url,
+            "summoner_spell_image_url": self.summoner_spell_image_url
         }
     
     @classmethod
@@ -77,5 +80,7 @@ class ChampionMatchup:
             early_game=data["early_game"],
             how_to_trade=data["how_to_trade"],
             what_to_watch_out_for=data["what_to_watch_out_for"],
-            tips=data["tips"]
+            tips=data["tips"],
+            rune_image_url=data.get("rune_image_url", ""),
+            summoner_spell_image_url=data.get("summoner_spell_image_url", "")
         ) 

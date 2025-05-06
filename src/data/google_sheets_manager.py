@@ -11,11 +11,21 @@ import time
 # Add the src directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.data import image_hack
 from src.logger import logger
 from src.exceptions import GoogleSheetsError
 
+# Debug logging
+logger.info("Starting script")
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Credentials file exists: {os.path.exists('credentials.json')}")
+logger.info(f"Token file exists: {os.path.exists('token.json')}")
+
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/drive.readonly'
+]
 
 # Rate limiting constants
 MAX_RETRIES = 3
@@ -30,12 +40,16 @@ class GoogleSheetsManager:
         self.spreadsheet_id = spreadsheet_id or "1wcrN6SRX1EsEce4s2HL8GBIa1CjPVG5L32mW9ml7K3s"
         logger.info(f"Initializing GoogleSheetsManager with spreadsheet ID: {self.spreadsheet_id}")
         
-        self.service = self._get_service()
+        self.creds = self._get_credentials()
+        self.sheets_service = self._get_sheets_service()
+        self.drive_service = self._get_drive_service()
         self.last_request_time = 0
         
         # Cache for storing sheet data
         self.matchups_data = None
         self.champions_list = None
+        
+        self.image_hack_data = image_hack.get_image_hack_data()
         
         # Load sheet data on initialization
         self._load_sheets_data()
@@ -46,7 +60,7 @@ class GoogleSheetsManager:
             logger.info("Loading all matchup data from Google Sheets...")
             # Load the entire Matchups sheet
             result = self._execute_with_retry(
-                self.service.spreadsheets().values().get,
+                self.sheets_service.spreadsheets().values().get,
                 spreadsheetId=self.spreadsheet_id,
                 range='Matchups!A1:Z100'  # Adjust range as needed to include all necessary columns and header row
             )
@@ -94,15 +108,11 @@ class GoogleSheetsManager:
         """Refresh all data from the Google Sheet."""
         self._load_sheets_data()
 
-    def _get_service(self):
-        """Get the Google Sheets service."""
+    def _get_credentials(self):
+        """Get credentials for both Sheets and Drive APIs."""
         creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
         if os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
@@ -110,11 +120,17 @@ class GoogleSheetsManager:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     'credentials.json', SCOPES)
                 creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
+        return creds
 
-        return googleapiclient.discovery.build('sheets', 'v4', credentials=creds)
+    def _get_sheets_service(self):
+        """Get the Google Sheets service."""
+        return googleapiclient.discovery.build('sheets', 'v4', credentials=self.creds)
+
+    def _get_drive_service(self):
+        """Get the Google Drive service."""
+        return googleapiclient.discovery.build('drive', 'v3', credentials=self.creds)
 
     def _rate_limit(self):
         """Implement rate limiting to avoid hitting API limits."""
@@ -142,7 +158,7 @@ class GoogleSheetsManager:
                 raise GoogleSheetsError(f"Error accessing Google Sheets: {str(e)}")
             except Exception as e:
                 raise GoogleSheetsError(f"Error accessing Google Sheets: {str(e)}")
-
+    
     def get_all_champions(self) -> List[str]:
         """Get a list of all champions from the cached data."""
         if not self.champions_list:
@@ -187,31 +203,39 @@ class GoogleSheetsManager:
         logger.warning(f"Champion '{champion}' not found in any row")
         return -1
 
-    def get_champion_runes(self, champion: str) -> List[str]:
+    def get_champion_runes(self, champion: str) -> str:
         """Get runes for a specific champion from cached data."""
         try:
             champion = champion.strip()
             row_idx = self._find_champion_row_index(champion)
             if row_idx >= 0:
-                #TODO: Implement this
-                return []
-            return []
+                #TODO: Implement this better, for now use image hack
+                # Find champion position out of total champions
+                champion_position = self.champions_list.index(champion.upper())
+                # Get runes from image hack list
+                
+                return self.image_hack_data[champion_position][0]
+            return ""
         except Exception as e:
             logger.error(f"Error getting runes for {champion}: {str(e)}")
-            return []
+            return ""
 
-    def get_summoner_spells(self, champion: str) -> List[str]:
+    def get_summoner_spells(self, champion: str) -> str:
         """Get summoner spells for a specific champion from cached data."""
         try:
             champion = champion.strip()
             row_idx = self._find_champion_row_index(champion)
             if row_idx >= 0:
-                # TODO: Implement this
-                return []
-            return []
+                #TODO: Implement this better, for now use image hack
+                # Find champion position out of total champions
+                champion_position = self.champions_list.index(champion.upper())
+                # Get Summoner Spells from image hack list
+                
+                return self.image_hack_data[champion_position][1]
+            return ""
         except Exception as e:
             logger.error(f"Error getting summoner spells for {champion}: {str(e)}")
-            return []
+            return ""
 
     def get_matchup_tldr(self, champion: str) -> str:
         """Get the TL;DR for a specific matchup from column D."""
@@ -248,42 +272,6 @@ class GoogleSheetsManager:
         except Exception as e:
             logger.error(f"Error getting gameplay for {champion}: {str(e)}")
             return ""
-            
-    def get_all_images_in_matchups(self):
-        """Pull a list of all embedded images in the 'Matchups' tab and print their metadata."""
-        try:
-            sheet_id = self.spreadsheet_id
-            sheet = self.service.spreadsheets().get(
-                spreadsheetId=sheet_id,
-                includeGridData=True
-            ).execute()
-            for s in sheet['sheets']:
-                title = s['properties']['title']
-                if title.lower() == 'matchups':
-                    # Try to find drawings/overlays/embeddedObjects
-                    found = False
-                    if 'drawings' in s:
-                        found = True
-                        print(f"Found {len(s['drawings'])} drawings in 'Matchups':")
-                        for drawing in s['drawings']:
-                            print(drawing)
-                    if 'overlays' in s:
-                        found = True
-                        print(f"Found {len(s['overlays'])} overlays in 'Matchups':")
-                        for overlay in s['overlays']:
-                            print(overlay)
-                    if 'embeddedObjects' in s:
-                        found = True
-                        print(f"Found {len(s['embeddedObjects'])} embeddedObjects in 'Matchups':")
-                        for obj in s['embeddedObjects']:
-                            print(obj)
-                    if not found:
-                        print("No drawings, overlays, or embeddedObjects found in 'Matchups'. Try inspecting the full sheet data.")
-                    return
-            print("No 'Matchups' tab found in the spreadsheet.")
-        except Exception as e:
-            logger.error(f"Error getting images in 'Matchups': {str(e)}", exc_info=True)
-            print(f"Error getting images in 'Matchups': {str(e)}")
 
     def get_matchup_difficulty(self, champion: str) -> str:
         """Get the matchup difficulty string for the given champion from cached data."""
@@ -396,7 +384,7 @@ if __name__ == "__main__":
     gameplay_dict = manager.create_gameplay_dict(test_champion)
     print(f"Gameplay Dictionary: {gameplay_dict}\n")
     
-    print("\n--- Embedded images in 'Matchups' tab ---")
-    manager.get_all_images_in_matchups()
+    print(f"Runes: {manager.get_champion_runes(test_champion)}")
+    print(f"Summoner Spells: {manager.get_summoner_spells(test_champion)}")
 
     

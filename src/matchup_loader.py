@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.champion_matchup import ChampionMatchup
 from src.data.google_sheets_manager import GoogleSheetsManager
+from src.data.image_hack import get_champion_urls
 from src.logger import logger
 import asyncio
 
@@ -14,6 +15,7 @@ class MatchupLoader:
     def __init__(self):
         """Initialize the MatchupLoader with a GoogleSheetsManager instance."""
         self.sheets_manager = GoogleSheetsManager(os.getenv('SHEET_ID'))
+        self.champion_urls = get_champion_urls()
     
     async def load_matchups(self) -> List[ChampionMatchup]:
         """Load all champion matchups from the Google Sheet."""
@@ -64,9 +66,17 @@ class MatchupLoader:
                             "tips": ""
                         }
                     
-                    # Get runes and summoner spell information (empty for now)
+                    # Get runes and summoner spell information
                     runes = self.sheets_manager.get_champion_runes(champion) or []
-                    summoner_spell = ''  # Can be implemented later
+                    summoner_spell = self.sheets_manager.get_summoner_spells(champion) or []
+                    
+                    # Get image URLs for runes and summoner spells
+                    rune_image_url = ""
+                    summoner_spell_image_url = ""
+                    if champion in self.champion_urls and len(self.champion_urls[champion]) >= 2:
+                        rune_image_url = self.champion_urls[champion][0]
+                        summoner_spell_image_url = self.champion_urls[champion][1]
+                        logger.debug(f"Found image URLs for {champion}: runes={rune_image_url}, summoner={summoner_spell_image_url}")
                     
                     overview = ""
                     try:
@@ -84,7 +94,9 @@ class MatchupLoader:
                         early_game=gameplay_dict['early_game'],
                         how_to_trade=gameplay_dict['how_to_trade'],
                         what_to_watch_out_for=gameplay_dict['what_to_watch_out_for'],
-                        tips=gameplay_dict['tips']
+                        tips=gameplay_dict['tips'],
+                        rune_image_url=rune_image_url,
+                        summoner_spell_image_url=summoner_spell_image_url
                     )
                     
                     # Debug log the created matchup
@@ -102,13 +114,15 @@ class MatchupLoader:
                     minimal_matchup = ChampionMatchup(
                         champion_name=champion,
                         matchup_difficulty="Unknown",
-                        runes=[],
+                        runes="",
                         summoner_spell="",
                         matchup_overview=f"Error loading matchup information for {champion}.",
                         early_game="",
                         how_to_trade="",
                         what_to_watch_out_for="",
-                        tips=""
+                        tips="",
+                        rune_image_url="",
+                        summoner_spell_image_url=""
                     )
                     matchups.append(minimal_matchup)
                     continue

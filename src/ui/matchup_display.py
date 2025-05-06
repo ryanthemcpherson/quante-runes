@@ -134,44 +134,39 @@ class MatchupDisplay(BaseUI):
         champion_label.setStyleSheet("font-size: 22px; font-weight: bold; color: #ff4444;")
         name_difficulty_layout.addWidget(champion_label)
         
-        # Difficulty
-        difficulty = "Unknown"
-        difficulty_color = "#ff4444"  # Default red color
-        
+        # Difficulty label
+        difficulty = ""
         if isinstance(matchup_info, str):
-            # Handle string-based matchup info
-            import re
-            match = re.search(r'Difficulty:\s*([^\n]+)', matchup_info)
-            if match:
-                difficulty = match.group(1).strip()
+            difficulty = "Unknown"
         else:
-            # Handle ChampionMatchup object
             if hasattr(matchup_info, 'matchup_difficulty') and matchup_info.matchup_difficulty:
-                difficulty = matchup_info.matchup_difficulty.strip()
-                logger.debug(f"Raw difficulty from matchup object: '{difficulty}'")
+                difficulty = matchup_info.matchup_difficulty
                 
-                # Set color based on keywords in the difficulty text
-                if any(easy_term in difficulty.upper() for easy_term in ['EASY', 'SIMPLE', '1', 'TRIVIAL']):
-                    difficulty_color = "#44aa44"  # Green for easy
-                elif any(medium_term in difficulty.upper() for medium_term in ['MEDIUM', 'NORMAL', 'MODERATE', '2']):
-                    difficulty_color = "#aaaa44"  # Yellow for medium
-                elif any(hard_term in difficulty.upper() for hard_term in ['HARD', 'DIFFICULT', 'CHALLENGING', '3']):
-                    difficulty_color = "#aa4444"  # Red for hard
-                elif any(extreme_term in difficulty.upper() for extreme_term in ['EXTREME', 'VERY HARD', 'IMPOSSIBLE', '4', '5']):
-                    difficulty_color = "#aa44aa"  # Purple for extreme
-        
-        logger.debug(f"Final difficulty for {champion}: '{difficulty}' with color {difficulty_color}")
-        
-        difficulty_label = QLabel(f"Difficulty: {difficulty}")
-        difficulty_label.setStyleSheet(f"""
-            font-size: 14px; 
-            font-weight: bold; 
+        difficulty_label = QLabel(difficulty)
+        difficulty_label.setStyleSheet("""
             color: white;
-            background-color: {difficulty_color};
+            font-size: 18px;
+            background-color: rgba(45, 45, 45, 0.7);
             border-radius: 4px;
             padding: 4px 8px;
         """)
         name_difficulty_layout.addWidget(difficulty_label)
+        
+        # Add rune and summoner spell images if available
+        if not isinstance(matchup_info, str) and hasattr(matchup_info, 'rune_image_url') and hasattr(matchup_info, 'summoner_spell_image_url'):
+            rune_spell_layout = QHBoxLayout()
+            rune_spell_layout.setSpacing(8)
+            
+            # Summoner spell image (larger size)
+            if matchup_info.summoner_spell_image_url:
+                spell_label = QLabel()
+                spell_label.setFixedSize(64, 64)  # Increased from 48x48 to 64x64
+                self.load_champion_image(spell_label, matchup_info.summoner_spell_image_url)
+                rune_spell_layout.addWidget(spell_label)
+            
+            rune_spell_layout.addStretch()
+            name_difficulty_layout.addLayout(rune_spell_layout)
+        
         name_difficulty_layout.addStretch()
         
         info_layout.addLayout(name_difficulty_layout)
@@ -369,17 +364,51 @@ class MatchupDisplay(BaseUI):
             
         has_tips = tips is not None and tips
         has_runes = hasattr(matchup_info, 'runes') and matchup_info.runes and any(matchup_info.runes)
-        has_summ = hasattr(matchup_info, 'summoner_spell') and matchup_info.summoner_spell
+        has_rune_image = hasattr(matchup_info, 'rune_image_url') and matchup_info.rune_image_url
         
-        if not (has_tips or has_runes or has_summ):
+        if not (has_tips or has_runes or has_rune_image):
             return None
             
-        logger.debug(f"Creating tips tab with content: {has_tips=}, {has_runes=}, {has_summ=}")
+        logger.debug(f"Creating tips tab with content: {has_tips=}, {has_runes=}, {has_rune_image=}")
             
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(16)
+        
+        # Runes section
+        if has_rune_image:
+            runes_frame = QFrame()
+            runes_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2d2d2d;
+                    border-radius: 4px;
+                    padding: 8px;
+                }
+            """)
+            runes_layout = QVBoxLayout(runes_frame)
+            runes_layout.setSpacing(8)
+            
+            runes_title = QLabel("Recommended Runes")
+            runes_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #44aaff;")
+            runes_layout.addWidget(runes_title)
+            
+            # Rune image (full size)
+            rune_image_label = QLabel()
+            rune_image_label.setFixedSize(512, 512)
+            rune_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.load_champion_image(rune_image_label, matchup_info.rune_image_url)
+            runes_layout.addWidget(rune_image_label, 0, Qt.AlignmentFlag.AlignCenter)
+            
+            # Rune text if available
+            if has_runes:
+                rune_text = "\n".join([r for r in matchup_info.runes if r])
+                runes_content = QLabel(rune_text)
+                runes_content.setWordWrap(True)
+                runes_content.setStyleSheet("color: #cccccc; font-size: 14px;")
+                runes_layout.addWidget(runes_content)
+            
+            layout.addWidget(runes_frame)
         
         # Tips section
         if has_tips:
@@ -403,47 +432,6 @@ class MatchupDisplay(BaseUI):
             tips_layout.addWidget(tips_content)
             
             layout.addWidget(tips_frame)
-        
-        # Runes and summoner spells section
-        if has_runes or has_summ:
-            build_frame = QFrame()
-            build_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2d2d2d;
-                    border-radius: 4px;
-                    padding: 8px;
-                }
-            """)
-            build_layout = QVBoxLayout(build_frame)
-            
-            build_title = QLabel("Recommended Build")
-            build_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #44aaff;")
-            build_layout.addWidget(build_title)
-            
-            # Runes section
-            if has_runes:
-                runes_title = QLabel("Runes:")
-                runes_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #44aaff;")
-                build_layout.addWidget(runes_title)
-                
-                rune_text = "\n".join([r for r in matchup_info.runes if r])
-                runes_content = QLabel(rune_text)
-                runes_content.setWordWrap(True)
-                runes_content.setStyleSheet("color: #cccccc; font-size: 14px;")
-                build_layout.addWidget(runes_content)
-            
-            # Summoner spell section
-            if has_summ:
-                summ_title = QLabel("Summoner Spell:")
-                summ_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #aa44ff; margin-top: 8px;")
-                build_layout.addWidget(summ_title)
-                
-                summ_content = QLabel(matchup_info.summoner_spell)
-                summ_content.setWordWrap(True)
-                summ_content.setStyleSheet("color: #cccccc; font-size: 14px;")
-                build_layout.addWidget(summ_content)
-            
-            layout.addWidget(build_frame)
         
         layout.addStretch() 
         return widget
