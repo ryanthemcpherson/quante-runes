@@ -8,6 +8,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 from qasync import QEventLoop
 from src.logger import logger
+from src.auth import google_auth
 
 # Log startup information
 startup_log_file = "startup_log.txt"
@@ -181,6 +182,107 @@ def main():
             with open(startup_log_file, "a") as f:
                 f.write(f"Failed to set icon: {str(e)}\n")
         
+        # Check for credentials and show authentication wizard if needed
+        try:
+            with open(startup_log_file, "a") as f:
+                f.write("Checking for Google credentials\n")
+            
+            # Check if there's an existing token file
+            token_exists = os.path.exists('token.json')
+            client_secrets_exist = os.path.exists('client_secrets.json')
+            
+            if not client_secrets_exist:
+                with open(startup_log_file, "a") as f:
+                    f.write("Client secrets file missing. Cannot continue.\n")
+                
+                error_box = QMessageBox()
+                error_box.setIcon(QMessageBox.Icon.Critical)
+                error_box.setWindowTitle("Missing Credentials")
+                error_box.setText("The OAuth client secrets file is missing.")
+                error_box.setInformativeText(
+                    "The application cannot connect to Google Sheets without this file. "
+                    "Please contact the application developer for support."
+                )
+                error_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                error_box.exec()
+                return
+            
+            # If no token exists or it's invalid, show the auth dialog
+            needs_auth = not token_exists
+            
+            if token_exists:
+                # Verify the token still works
+                try:
+                    with open(startup_log_file, "a") as f:
+                        f.write("Token exists. Verifying if it's valid...\n")
+                    
+                    # Try loading credentials without forcing reauth
+                    creds = google_auth.get_credentials(force_new_auth=False)
+                    
+                    if not creds:
+                        with open(startup_log_file, "a") as f:
+                            f.write("Existing token is invalid or expired.\n")
+                        needs_auth = True
+                except Exception as e:
+                    with open(startup_log_file, "a") as f:
+                        f.write(f"Error validating token: {str(e)}\n")
+                    needs_auth = True
+            
+            if needs_auth:
+                with open(startup_log_file, "a") as f:
+                    f.write("Need to show auth dialog.\n")
+                
+                # Import here to avoid circular imports
+                from src.ui.service_account_dialog import AuthInfoDialog
+                
+                # Show the auth info dialog
+                auth_dialog = AuthInfoDialog()
+                dialog_result = auth_dialog.exec()
+                
+                with open(startup_log_file, "a") as f:
+                    f.write(f"Auth dialog completed with result: {dialog_result}\n")
+                
+                # If user cancelled the dialog, exit
+                if dialog_result == 0:
+                    with open(startup_log_file, "a") as f:
+                        f.write("User cancelled authentication. Exiting.\n")
+                    logger.warning("Authentication cancelled by user.")
+                    return
+                
+                # Start the authentication flow
+                with open(startup_log_file, "a") as f:
+                    f.write("Starting OAuth authentication flow.\n")
+                
+                creds = google_auth.get_credentials(force_new_auth=True)
+                
+                if not creds:
+                    with open(startup_log_file, "a") as f:
+                        f.write("Authentication failed. Exiting.\n")
+                    
+                    error_box = QMessageBox()
+                    error_box.setIcon(QMessageBox.Icon.Critical)
+                    error_box.setWindowTitle("Authentication Error")
+                    error_box.setText("Authentication failed or you don't have access to the spreadsheet.")
+                    error_box.setInformativeText(
+                        "The application cannot continue without successful authentication. "
+                        "Please try again or contact the application developer for support."
+                    )
+                    error_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                    error_box.exec()
+                    return
+                
+                with open(startup_log_file, "a") as f:
+                    f.write("Authentication successful.\n")
+            else:
+                with open(startup_log_file, "a") as f:
+                    f.write("Valid token already exists. No need for authentication.\n")
+            
+        except Exception as e:
+            with open(startup_log_file, "a") as f:
+                f.write(f"Error during authentication check: {str(e)}\n{traceback.format_exc()}\n")
+            logger.error(f"Error during authentication check: {str(e)}", exc_info=True)
+            # Continue execution, the sheets manager will handle credential errors
+            
         # Set up event loop with error handling
         loop = None
         try:

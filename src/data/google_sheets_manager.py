@@ -1,11 +1,8 @@
 import os
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-import googleapiclient.discovery
 import sys
 from typing import List
-from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
+import googleapiclient.discovery
 import time
 
 # Add the src directory to the Python path
@@ -14,18 +11,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from src.data import image_hack
 from src.logger import logger
 from src.exceptions import GoogleSheetsError
+from src.auth import google_auth
 
 # Debug logging
 logger.info("Starting script")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"Credentials file exists: {os.path.exists('credentials.json')}")
 logger.info(f"Token file exists: {os.path.exists('token.json')}")
-
-# If modifying these scopes, delete the file token.json.
-SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets.readonly',
-    'https://www.googleapis.com/auth/drive.readonly'
-]
 
 # Rate limiting constants
 MAX_RETRIES = 3
@@ -109,19 +101,12 @@ class GoogleSheetsManager:
         self._load_sheets_data()
 
     def _get_credentials(self):
-        """Get credentials for both Sheets and Drive APIs."""
-        creds = None
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'credentials.json', SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
+        """Get credentials for both Sheets and Drive APIs using the auth module."""
+        creds = google_auth.get_credentials()
+        if not creds:
+            logger.error("Failed to obtain Google credentials")
+            # This will likely cause API calls to fail, but we can continue
+            # and let the API call handlers deal with the errors
         return creds
 
     def _get_sheets_service(self):
