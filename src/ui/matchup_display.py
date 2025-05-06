@@ -233,10 +233,10 @@ class MatchupDisplay(BaseUI):
             
             # Create tabs for each section
             sections = [
+                ("Tips & Runes", self.create_tips_runes_tab(matchup_info)),
                 ("Gameplan", self.create_gameplan_tab(matchup_info)),
                 ("Trading", self.create_trading_tab(matchup_info)),
-                ("Watchouts", self.create_watchouts_tab(matchup_info)),
-                ("Tips & Runes", self.create_tips_runes_tab(matchup_info))
+                ("Watchouts", self.create_watchouts_tab(matchup_info))
             ]
             
             for title, widget in sections:
@@ -244,6 +244,8 @@ class MatchupDisplay(BaseUI):
                     tabs.addTab(widget, title)
             
             if tabs.count() > 0:
+                # Set Tips & Runes as the default tab
+                tabs.setCurrentIndex(0)
                 main_layout.addWidget(tabs)
             else:
                 # No tabs were created, display a message
@@ -366,12 +368,11 @@ class MatchupDisplay(BaseUI):
             
         has_tips = tips is not None and tips
         has_runes = hasattr(matchup_info, 'runes') and matchup_info.runes and any(matchup_info.runes)
-        has_rune_image = hasattr(matchup_info, 'rune_image_url') and matchup_info.rune_image_url
         
-        if not (has_tips or has_runes or has_rune_image):
+        if not (has_tips or has_runes):
             return None
             
-        logger.debug(f"Creating tips tab with content: {has_tips=}, {has_runes=}, {has_rune_image=}")
+        logger.debug(f"Creating tips tab with content: {has_tips=}, {has_runes=}")
             
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -379,7 +380,7 @@ class MatchupDisplay(BaseUI):
         layout.setSpacing(16)
         
         # Runes section
-        if has_rune_image:
+        if has_runes:
             runes_frame = QFrame()
             runes_frame.setStyleSheet("""
                 QFrame {
@@ -399,16 +400,12 @@ class MatchupDisplay(BaseUI):
             rune_image_label = QLabel()
             rune_image_label.setFixedSize(512, 512)
             rune_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.load_image(rune_image_label, matchup_info.runes)
+            if matchup_info.runes and matchup_info.runes.strip():
+                logger.debug(f"Loading rune image from URL: {matchup_info.runes}")
+                self.load_image(rune_image_label, matchup_info.runes)
+            else:
+                logger.debug("No valid rune image URL found")
             runes_layout.addWidget(rune_image_label, 0, Qt.AlignmentFlag.AlignCenter)
-            
-            # Rune text if available
-            if has_runes:
-                rune_text = "\n".join([r for r in matchup_info.runes if r])
-                runes_content = QLabel(rune_text)
-                runes_content.setWordWrap(True)
-                runes_content.setStyleSheet("color: #cccccc; font-size: 14px;")
-                runes_layout.addWidget(runes_content)
             
             layout.addWidget(runes_frame)
         
