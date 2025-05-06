@@ -299,27 +299,70 @@ class MainWindow(QMainWindow):
         try:
             # Ensure matchups are loaded
             if not self.matchups:
+                logger.info("Loading matchups for the first time in update_matchups")
                 self.matchups = await self.matchup_loader.load_matchups()
                 # Populate the dropdown with the loaded matchups
                 self.populate_champion_dropdown()
                 
+            logger.info("Fetching enemy champions from League client")
             enemy_champions = await self.league_client.get_enemy_champions()
+            
+            logger.info("Clearing previous matchups display")
             self.matchup_display.clear_matchups()
             
             if not enemy_champions:
+                logger.info("No enemy champions detected")
                 if self.in_champion_select:
+                    logger.info("In champion select but no champions - showing ban suggestions")
                     self.show_ban_suggestions()
                 else:
+                    logger.info("Not in champion select - showing waiting message")
                     self.show_waiting_message()
                 return
                 
-            for champion in enemy_champions:
-                matchup_info = self.find_matchup_by_name(champion)
-                if matchup_info:
-                    # Pass the matchup object directly to the display
-                    self.matchup_display.add_matchup(champion, matchup_info)
-                else:
-                    self.matchup_display.add_matchup(champion, f"No matchup information found for {champion}.")
+            logger.info(f"Processing {len(enemy_champions)} enemy champions: {', '.join(enemy_champions)}")
+            
+            # Create a crash detection file to help identify where crashes happen
+            with open("matchup_processing.log", "a") as f:
+                f.write(f"Starting to process {len(enemy_champions)} champions: {', '.join(enemy_champions)}\n")
+            
+            for i, champion in enumerate(enemy_champions):
+                try:
+                    # Log processing of each champion
+                    logger.info(f"Processing champion {i+1}/{len(enemy_champions)}: {champion}")
+                    with open("matchup_processing.log", "a") as f:
+                        f.write(f"Processing champion {i+1}/{len(enemy_champions)}: {champion}\n")
+                    
+                    matchup_info = self.find_matchup_by_name(champion)
+                    if matchup_info:
+                        logger.info(f"Found matchup info for {champion}")
+                        # Pass the matchup object directly to the display
+                        try:
+                            logger.debug(f"Adding matchup to display: {champion}")
+                            self.matchup_display.add_matchup(champion, matchup_info)
+                            logger.info(f"Successfully added matchup for {champion}")
+                            with open("matchup_processing.log", "a") as f:
+                                f.write(f"Successfully added matchup for {champion}\n")
+                        except Exception as display_e:
+                            logger.error(f"Error adding matchup display for {champion}: {str(display_e)}", exc_info=True)
+                            with open("matchup_processing.log", "a") as f:
+                                f.write(f"ERROR adding matchup for {champion}: {str(display_e)}\n")
+                    else:
+                        logger.warning(f"No matchup information found for {champion}")
+                        try:
+                            self.matchup_display.add_matchup(champion, f"No matchup information found for {champion}.")
+                            logger.info(f"Added placeholder for {champion}")
+                        except Exception as display_e:
+                            logger.error(f"Error adding placeholder for {champion}: {str(display_e)}", exc_info=True)
+                except Exception as champ_e:
+                    logger.error(f"Error processing champion {champion}: {str(champ_e)}", exc_info=True)
+                    with open("matchup_processing.log", "a") as f:
+                        f.write(f"ERROR processing champion {champion}: {str(champ_e)}\n")
+            
+            with open("matchup_processing.log", "a") as f:
+                f.write("Finished processing all champions\n")
+            logger.info("Successfully processed all champions")
+                    
         except LeagueClientError as e:
             if "League Client is not running" in str(e):
                 self.client_connected = False
@@ -331,6 +374,8 @@ class MainWindow(QMainWindow):
                 self.update_status_label(f"League Client Error: {str(e)}", is_error=True)
         except Exception as e:
             logger.error(f"Error updating matchups: {str(e)}", exc_info=True)
+            with open("matchup_processing.log", "a") as f:
+                f.write(f"CRITICAL ERROR in update_matchups: {str(e)}\n")
             self.matchup_display.clear_matchups()
             self.matchup_display.add_matchup("Error", f"Unable to fetch matchup information: {str(e)}")
             self.update_status_label(f"Error: {str(e)}", is_error=True)
@@ -383,11 +428,52 @@ class MainWindow(QMainWindow):
     async def on_champion_selection_changed(self):
         """Handle champion selection change in dropdown"""
         logger.debug("Champion selection changed")
-        self.check_timer.stop()
-        self.update_timer.stop()
-        self.manual_mode = True
-        await self.test_selected_matchup()
-        self.setWindowTitle(f"Urgot Matchup Helper - Viewing {self.champion_selector.get_selected_champion()}")
+        # Force garbage collection to help with memory management
+        import gc
+        
+        try:
+            # Stop the timers before processing to prevent concurrent updates
+            self.check_timer.stop()
+            self.update_timer.stop()
+            
+            # Enable manual mode
+            self.manual_mode = True
+            
+            # Process pending events to ensure UI is responsive
+            QApplication.processEvents()
+            
+            # Explicitly clear previous matchups before loading new ones
+            # This ensures resources are properly released
+            if self.matchup_display:
+                self.matchup_display.clear_matchups()
+                
+            # Process events again to ensure cleanup completes
+            QApplication.processEvents()
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Now load the new matchup
+            await self.test_selected_matchup()
+            
+            # Update the window title
+            selected_champion = self.champion_selector.get_selected_champion()
+            self.setWindowTitle(f"Urgot Matchup Helper - Viewing {selected_champion}")
+            
+            # Log successful champion change
+            logger.info(f"Successfully switched to champion: {selected_champion}")
+            
+        except Exception as e:
+            logger.error(f"Error during champion selection change: {str(e)}", exc_info=True)
+            if self.matchup_display:
+                self.matchup_display.clear_matchups()
+                self.matchup_display.add_matchup("Error", f"Error loading champion data: {str(e)}")
+                
+            # Ensure window title reflects error state
+            self.setWindowTitle("Urgot Matchup Helper - Error Loading Champion")
+        
+        # Always ensure we're processing events after a selection change
+        QApplication.processEvents()
 
     @asyncSlot()
     async def on_test_matchup_clicked(self):

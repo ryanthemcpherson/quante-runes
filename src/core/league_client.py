@@ -95,6 +95,10 @@ class LeagueClient:
             # Get the session data as a dictionary
             session = session_data if isinstance(session_data, dict) else await session_data.json()
             
+            # Debug log the session structure to help diagnose issues
+            logger.debug(f"Champion select session data keys: {list(session.keys())}")
+            logger.debug(f"localPlayerCellId: {session.get('localPlayerCellId')}")
+            
             # Find which team we're on
             for player in session.get('myTeam', []):
                 if player.get('cellId') == session.get('localPlayerCellId'):
@@ -105,14 +109,28 @@ class LeagueClient:
             
             # Determine enemy team
             enemy_team = 'theirTeam' if my_team == 'myTeam' else 'myTeam'
+            logger.debug(f"Identified my team as '{my_team}', enemy team as '{enemy_team}'")
             
             # Get enemy champions
-            for player in session.get(enemy_team, []):
+            enemy_team_list = session.get(enemy_team, [])
+            logger.debug(f"Found {len(enemy_team_list)} players in enemy team")
+            
+            for i, player in enumerate(enemy_team_list):
+                logger.debug(f"Processing enemy player {i+1}/{len(enemy_team_list)}")
                 if player.get('championId') and player['championId'] != 0:
                     champ_id = player['championId']
-                    champ_data = await self.get_champion_data(champ_id)
-                    if champ_data and 'name' in champ_data:
-                        enemy_champions.append(champ_data['name'])
+                    logger.debug(f"Found champion ID: {champ_id}")
+                    try:
+                        champ_data = await self.get_champion_data(champ_id)
+                        if champ_data and 'name' in champ_data:
+                            enemy_champions.append(champ_data['name'])
+                            logger.debug(f"Successfully added champion: {champ_data['name']} (ID: {champ_id})")
+                        else:
+                            logger.warning(f"Champion data for ID {champ_id} missing 'name' property")
+                    except Exception as champ_e:
+                        logger.error(f"Error fetching champion data for ID {champ_id}: {str(champ_e)}", exc_info=True)
+            
+            logger.info(f"Total enemy champions detected: {len(enemy_champions)} - {', '.join(enemy_champions)}")
             return enemy_champions
         except Exception as e:
             logger.error(f"Error getting enemy champions: {str(e)}", exc_info=True)
