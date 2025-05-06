@@ -1,5 +1,6 @@
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel
+from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QLabel, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon, QAction
 from .matchup_display import MatchupDisplay
 from .champion_selector import ChampionSelector
 from ..core.league_client import LeagueClient
@@ -8,6 +9,7 @@ from qasync import asyncSlot
 from src.logger import logger
 from src.matchup_loader import MatchupLoader
 from src.champion_matchup import ChampionMatchup
+from PyQt6.QtWidgets import QApplication
 
 # Try to import LeagueClientError
 try:
@@ -26,6 +28,26 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Urgot Matchup Helper")
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        
+        # Initialize system tray
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(QIcon("urgot_icon.png"))
+        
+        # Create tray menu
+        tray_menu = QMenu()
+        show_action = QAction("Show", self)
+        show_action.triggered.connect(self.show)
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(show_action)
+        tray_menu.addAction(quit_action)
+        self.tray_icon.setContextMenu(tray_menu)
+        
+        # Connect tray icon signals
+        self.tray_icon.activated.connect(self.tray_icon_activated)
+        
+        # Show tray icon
+        self.tray_icon.show()
         
         # Initialize variables first
         self.status_label = None
@@ -453,3 +475,50 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"Error updating status label: {str(e)}", exc_info=True)
                 pass 
+
+    def closeEvent(self, event):
+        """Override close event to minimize to tray instead of closing"""
+        # Check if this is a quit request or just a close
+        if hasattr(self, '_force_quit') and self._force_quit:
+            # Allow the close event to proceed normally
+            event.accept()
+        else:
+            # Ignore close event and minimize to tray instead
+            event.ignore()
+            self.hide()
+            self.tray_icon.showMessage(
+                "Urgot Matchup Helper",
+                "Application minimized to tray. Right-click the tray icon to show or quit.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+        
+    def tray_icon_activated(self, reason):
+        """Handle tray icon activation"""
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:  # Single click
+            if self.isVisible():
+                self.hide()
+            else:
+                self.show()
+                self.raise_()
+                self.activateWindow()
+                
+    def quit_application(self):
+        """Properly quit the application"""
+        # Stop all timers
+        if self.check_timer:
+            self.check_timer.stop()
+        if self.update_timer:
+            self.update_timer.stop()
+            
+        # Set flag to allow the window to close
+        self._force_quit = True
+        
+        # Hide the tray icon
+        self.tray_icon.hide()
+        
+        # Close the window (which will now be accepted due to _force_quit flag)
+        self.close()
+        
+        # Quit the application
+        QApplication.quit() 

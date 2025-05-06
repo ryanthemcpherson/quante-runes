@@ -111,6 +111,11 @@ async def shutdown(window):
             window.update_timer.stop()
             logger.info("Update timer stopped.")
             
+        # Hide the tray icon if it exists
+        if hasattr(window, 'tray_icon') and window.tray_icon:
+            window.tray_icon.hide()
+            logger.info("Tray icon hidden.")
+            
         # Close league client connection
         if hasattr(window, 'league_client') and window.league_client:
             await window.league_client.close()
@@ -126,9 +131,14 @@ async def shutdown(window):
             logger.info("GoogleSheetsManager resources released.")
             
         # Clean up UI components if needed
-        if hasattr(window, 'matchup_display'):
+        if hasattr(window, 'matchup_display') and window.matchup_display:
             window.matchup_display.clear_matchups()
             logger.info("UI components cleared.")
+        
+        # Set force quit flag if supported
+        if hasattr(window, '_force_quit'):
+            window._force_quit = True
+            logger.info("Force quit flag set.")
             
         logger.info("All resources cleaned up successfully.")
     except Exception as e:
@@ -232,29 +242,40 @@ def main():
                 f.write("Received signal for shutdown\n")
             logger.info("Received termination signal. Shutting down...")
             try:
+                # Create and await shutdown task
                 shutdown_task = loop.create_task(shutdown(window))
                 
-                # Give more time for shutdown to complete, especially for async operations
-                def stop_loop():
+                # Define a function to clean up and stop the loop
+                def terminate_app():
                     try:
                         if not shutdown_task.done():
                             logger.warning("Shutdown task not completed, forcing stop...")
+                        
+                        # Stop the loop, which will cause the app to exit
                         loop.stop()
+                        
+                        # Explicitly quit the application
+                        if app:
+                            app.quit()
+                            
                         with open(startup_log_file, "a") as f:
-                            f.write("Stopped event loop\n")
+                            f.write("Stopped event loop and quit application\n")
                     except Exception as e:
-                        logger.error(f"Error stopping event loop: {str(e)}", exc_info=True)
+                        logger.error(f"Error during termination: {str(e)}", exc_info=True)
                         with open(startup_log_file, "a") as f:
-                            f.write(f"Error stopping event loop: {str(e)}\n")
+                            f.write(f"Error during termination: {str(e)}\n")
                         loop.stop()
                 
                 # Allow up to 3 seconds for shutdown to complete
-                loop.call_later(3, stop_loop)
+                loop.call_later(3, terminate_app)
             except Exception as e:
                 logger.error(f"Error during signal handling: {str(e)}", exc_info=True)
                 with open(startup_log_file, "a") as f:
                     f.write(f"Error during signal handling: {str(e)}\n")
+                # Stop the loop immediately in case of error
                 loop.stop()
+                if app:
+                    app.quit()
         
         # Set up signal handlers with error handling
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -342,7 +363,23 @@ def main():
                 try:
                     with open(startup_log_file, "a") as f:
                         f.write("Running final shutdown\n")
-                    asyncio.run(shutdown(window))
+                    # Use a timeout to prevent blocking if the shutdown task doesn't complete
+                    try:
+                        # Create a new event loop for the final shutdown
+                        final_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(final_loop)
+                        
+                        # Run shutdown with a timeout
+                        shutdown_future = asyncio.ensure_future(shutdown(window), loop=final_loop)
+                        final_loop.run_until_complete(asyncio.wait_for(shutdown_future, timeout=3.0))
+                    except asyncio.TimeoutError:
+                        logger.warning("Final shutdown timed out after 3 seconds")
+                        with open(startup_log_file, "a") as f:
+                            f.write("Final shutdown timed out after 3 seconds\n")
+                    except Exception as e:
+                        logger.error(f"Error during final shutdown: {str(e)}", exc_info=True)
+                        with open(startup_log_file, "a") as f:
+                            f.write(f"Error during final shutdown: {str(e)}\n")
                 except Exception as e:
                     logger.error(f"Error during final shutdown: {str(e)}", exc_info=True)
                     with open(startup_log_file, "a") as f:
@@ -357,6 +394,8 @@ def main():
                 with open(startup_log_file, "a") as f:
                     f.write("Quitting application\n")
                 app.quit()
+                # Force app to process events and shut down
+                app.processEvents()
         except Exception as e:
             logger.error(f"Error quitting application: {str(e)}", exc_info=True)
             with open(startup_log_file, "a") as f:
@@ -365,6 +404,9 @@ def main():
         logger.info("Application terminated.")
         with open(startup_log_file, "a") as f:
             f.write("Application terminated\n")
+            
+        # As a last resort, force exit
+        sys.exit(0)
 
 if __name__ == "__main__":
     try:
