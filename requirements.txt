@@ -27,3 +27,6 @@ pytest==7.4.0
 pytest-qt==4.2.0
 pytest-asyncio==0.21.1
 ruff==0.1.0
+
+# Image Hack Related
+beautifulsoup4==4.12.2

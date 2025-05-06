@@ -172,6 +172,7 @@ class MainWindow(QMainWindow):
         
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_matchups)
+        self.update_timer.start(5000)  # Start the update timer with a 5-second interval
         
     @asyncSlot()
     async def check_champion_select(self):
@@ -273,29 +274,12 @@ class MainWindow(QMainWindow):
     @asyncSlot()
     async def update_matchups(self):
         """Update the displayed matchup information"""
-        # Check if league_client exists
-        if not self.league_client:
-            logger.warning("Cannot update matchups: league_client not initialized")
-            if self.status_label:
-                self.update_status_label("League Client Not Available", is_error=True)
-            return
-            
-        # Check if matchup_loader exists
-        if not self.matchup_loader:
-            logger.warning("Cannot update matchups: matchup_loader not initialized")
-            if self.status_label:
-                self.update_status_label("Matchup Data Not Available", is_error=True)
-            return
-            
-        # Check if matchup_display exists
-        if not self.matchup_display:
-            logger.error("Cannot update matchups: matchup_display not initialized")
-            return
-            
         try:
             # Ensure matchups are loaded
             if not self.matchups:
                 self.matchups = await self.matchup_loader.load_matchups()
+                # Populate the dropdown with the loaded matchups
+                self.populate_champion_dropdown()
                 
             enemy_champions = await self.league_client.get_enemy_champions()
             self.matchup_display.clear_matchups()

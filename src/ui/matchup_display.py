@@ -7,6 +7,7 @@ from .base_ui import BaseUI
 from src.logger import logger
 import tempfile
 import os
+from PyQt6 import sip
 
 class MatchupDisplay(BaseUI):
     def __init__(self):
@@ -109,7 +110,7 @@ class MatchupDisplay(BaseUI):
                 image_url = matchup_info.image_url
                 logger.debug(f"Generated image URL: {image_url}")
                 
-                self.load_champion_image(img_label, image_url)
+                self.load_image(img_label, image_url)
             except Exception as e:
                 logger.error(f"Error loading champion image: {str(e)}", exc_info=True)
                 # Create a fallback URL with the champion name
@@ -117,7 +118,7 @@ class MatchupDisplay(BaseUI):
                     formatted_name = champion.replace(" ", "").replace("'", "").replace(".", "")
                     fallback_url = f"https://ddragon.leagueoflegends.com/cdn/15.9.1/img/champion/{formatted_name}.png"
                     logger.debug(f"Using fallback image URL: {fallback_url}")
-                    self.load_champion_image(img_label, fallback_url)
+                    self.load_image(img_label, fallback_url)
                 except Exception as fallback_e:
                     logger.error(f"Fallback image loading failed: {str(fallback_e)}", exc_info=True)
         
@@ -151,21 +152,22 @@ class MatchupDisplay(BaseUI):
             padding: 4px 8px;
         """)
         name_difficulty_layout.addWidget(difficulty_label)
-        
-        # Add rune and summoner spell images if available
-        if not isinstance(matchup_info, str) and hasattr(matchup_info, 'rune_image_url') and hasattr(matchup_info, 'summoner_spell_image_url'):
-            rune_spell_layout = QHBoxLayout()
-            rune_spell_layout.setSpacing(8)
-            
-            # Summoner spell image (larger size)
-            if matchup_info.summoner_spell_image_url:
-                spell_label = QLabel()
-                spell_label.setFixedSize(64, 64)  # Increased from 48x48 to 64x64
-                self.load_champion_image(spell_label, matchup_info.summoner_spell_image_url)
-                rune_spell_layout.addWidget(spell_label)
-            
-            rune_spell_layout.addStretch()
-            name_difficulty_layout.addLayout(rune_spell_layout)
+
+        # Add summoner spell image if available
+        if not isinstance(matchup_info, str) and hasattr(matchup_info, 'summoner_spell') and matchup_info.summoner_spell:
+            logger.debug(f"Found summoner spell image URL for {champion}: {matchup_info.summoner_spell}")
+            spell_label = QLabel()
+            spell_label.setFixedSize(160, 80)
+            spell_label.setStyleSheet("""
+                QLabel {
+                    background-color: rgba(45, 45, 45, 0.7);
+                    border-radius: 4px;
+                }
+            """)
+            self.load_image(spell_label, matchup_info.summoner_spell)
+            name_difficulty_layout.addWidget(spell_label)
+        else:
+            logger.debug(f"No summoner spell image URL found for {champion}")
         
         name_difficulty_layout.addStretch()
         
@@ -397,7 +399,7 @@ class MatchupDisplay(BaseUI):
             rune_image_label = QLabel()
             rune_image_label.setFixedSize(512, 512)
             rune_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.load_champion_image(rune_image_label, matchup_info.rune_image_url)
+            self.load_image(rune_image_label, matchup_info.runes)
             runes_layout.addWidget(rune_image_label, 0, Qt.AlignmentFlag.AlignCenter)
             
             # Rune text if available
@@ -436,9 +438,10 @@ class MatchupDisplay(BaseUI):
         layout.addStretch() 
         return widget
 
-    def load_champion_image(self, label, image_url):
-        """Load champion image from the DataDragon CDN"""
+    def load_image(self, label, image_url):
+        """Load image from URL"""
         try:
+            logger.debug(f"Loading image from URL: {image_url}")
             url = image_url
             request = QNetworkRequest(QUrl(url))
             reply = self.network_manager.get(request)
@@ -447,14 +450,20 @@ class MatchupDisplay(BaseUI):
             reply.finished.connect(lambda: self.on_image_downloaded(reply, label))
             
         except Exception as e:
-            logger.error(f"Error loading champion image: {str(e)}", exc_info=True)
+            logger.error(f"Error loading image: {str(e)}", exc_info=True)
             
     def on_image_downloaded(self, reply, label):
         """Handle downloaded image data"""
         try:
             if reply.error() == QNetworkReply.NetworkError.NoError:
+                # Check if label still exists
+                if not label or sip.isdeleted(label):
+                    logger.debug("Label no longer exists, skipping image processing")
+                    return
+                    
                 # Read the image data
                 img_data = reply.readAll()
+                logger.debug(f"Image data size: {len(img_data.data())} bytes")
                 
                 # Save to a temporary file
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -463,10 +472,22 @@ class MatchupDisplay(BaseUI):
                 
                 # Load image from the file
                 pixmap = QPixmap(temp_file.name)
-                scaled_pixmap = pixmap.scaled(90, 90, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                if pixmap.isNull():
+                    logger.error("Failed to load pixmap from temporary file")
+                    return
+                    
+                # Scale the pixmap to fit the label while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(
+                    label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                logger.debug(f"Scaled pixmap size: {scaled_pixmap.size().width()}x{scaled_pixmap.size().height()}")
                 
-                # Set the pixmap to the label
+                # Set the pixmap to the label and center it
                 label.setPixmap(scaled_pixmap)
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                label.setMinimumSize(1, 1)  # Allow the label to shrink if needed
                 
                 # Clean up the temporary file
                 os.unlink(temp_file.name)

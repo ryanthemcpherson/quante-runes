@@ -49,7 +49,7 @@ class GoogleSheetsManager:
         self.matchups_data = None
         self.champions_list = None
         
-        self.image_hack_data = image_hack.get_image_hack_data()
+        self.image_hack_data = image_hack.get_champion_urls()
         
         # Load sheet data on initialization
         self._load_sheets_data()

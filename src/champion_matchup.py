@@ -81,6 +81,6 @@ class ChampionMatchup:
             how_to_trade=data["how_to_trade"],
             what_to_watch_out_for=data["what_to_watch_out_for"],
             tips=data["tips"],
-            rune_image_url=data.get("rune_image_url", ""),
-            summoner_spell_image_url=data.get("summoner_spell_image_url", "")
+            rune_image_url=data["rune_image_url"],
+            summoner_spell_image_url=data["summoner_spell_image_url"]
         ) 

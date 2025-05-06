@@ -36,7 +36,7 @@ def extract_google_urls(html_content):
     
     return urls
 
-def get_image_hack_data():
+def get_champion_urls():
     # Read the HTML file
     with open('src/data/img_url_hack.html', 'r', encoding='utf-8') as f:
         html_content = f.read()
@@ -50,4 +50,4 @@ def get_image_hack_data():
     return paired_urls
 
 if __name__ == '__main__':
-    print(get_image_hack_data())
+    print(get_champion_urls())
