@@ -57,10 +57,6 @@ AUTH_COMPLETE_HTML = """
             color: #43b581;
             margin-bottom: 20px;
         }
-        p {
-            margin-bottom: 15px;
-            line-height: 1.5;
-        }
         .success-icon {
             font-size: 64px;
             color: #43b581;
@@ -84,9 +80,7 @@ AUTH_COMPLETE_HTML = """
 <body>
     <div class="container">
         <div class="success-icon">✓</div>
-        <h1>Authentication Successful!</h1>
-        <p>You have successfully authenticated with Google. The Urgot Matchup Helper now has access to read your Google Sheets data.</p>
-        <p>You can close this window and return to the application.</p>
+        <h1>Authentication Complete</h1>
         <button class="close-button" onclick="window.close()">Close Window</button>
     </div>
     <script>

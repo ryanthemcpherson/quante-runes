@@ -1,0 +1,1 @@
+C:\Users\Ryan\quante-runes\.venv\Scripts\python.exe main.py

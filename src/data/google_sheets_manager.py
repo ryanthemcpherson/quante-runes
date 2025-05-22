@@ -54,7 +54,7 @@ class GoogleSheetsManager:
             result = self._execute_with_retry(
                 self.sheets_service.spreadsheets().values().get,
                 spreadsheetId=self.spreadsheet_id,
-                range='Matchups!A1:Z100'  # Adjust range as needed to include all necessary columns and header row
+                range='Matchups!A1:Z'  # Load all rows in the Matchups sheet
             )
             
             self.matchups_data = result.get('values', [])
